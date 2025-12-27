@@ -1,0 +1,52 @@
+# Zig build artifacts
+zig-out/
+zig-cache/
+.zig-cache/
+*.o
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/node_modules/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+bun.lockb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+test-results/
+coverage/
+
+# Benchmark results
+benchmark-results.md
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local

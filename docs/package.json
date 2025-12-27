@@ -1,0 +1,14 @@
+{
+  "name": "args-zig-docs",
+  "version": "1.0.0",
+  "description": "Documentation for args.zig",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "vitepress-plugin-llms": "^1.9.3"
+  }
+}
