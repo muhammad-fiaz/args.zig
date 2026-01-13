@@ -40,7 +40,7 @@ A production-grade, high-performance command-line argument parsing library for Z
 - **Environment Variables** - Fallback to env vars for configuration
 - **Subcommands** - Full support for Git-style subcommands
 - **Colored Output** - ANSI color support for beautiful terminal output
-- **Update Checker** - Optional non-blocking update notifications from GitHub
+- **Update Checker** - Automatic non-blocking update notifications (enabled by default)
 - **Comprehensive Validation** - Type checking, choices, and custom validators
 - **Well Tested** - Extensive test coverage across all modules
 
@@ -239,13 +239,15 @@ try parser.addOption("user", .{
 
 ## Configuration
 
-### Disable Update Checker
+### Update Checker
+
+The update checker is **enabled by default** to keep you informed about new features and fixes. To disable it:
 
 ```zig
-// Global disable
+// Method 1: Global disable (Recommended)
 args.disableUpdateCheck();
 
-// Or per-parser
+// Method 2: Per-parser configuration
 var parser = try args.ArgumentParser.init(allocator, .{
     .name = "myapp",
     .config = .{ .check_for_updates = false },
@@ -313,6 +315,7 @@ Full documentation is available at [muhammad-fiaz.github.io/args.zig](https://mu
 - [Getting Started](https://muhammad-fiaz.github.io/args.zig/guide/getting-started)
 - [API Reference](https://muhammad-fiaz.github.io/args.zig/api/parser)
 - [Examples](https://muhammad-fiaz.github.io/args.zig/examples/)
+- [Update Checker](https://muhammad-fiaz.github.io/args.zig/guide/updates)
 
 ## Contributing
 
