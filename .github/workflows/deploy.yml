@@ -3,8 +3,6 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -19,16 +17,28 @@ concurrency:
 jobs:
   build-docs:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install Dependencies
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Clean state
+        working-directory: ./docs
+        run: |
+          rm -f package-lock.json bun.lockb
+          rm -rf node_modules
+
+      - name: Install dependencies
         working-directory: ./docs
         run: bun install
 
@@ -36,7 +46,7 @@ jobs:
         working-directory: ./docs
         run: bun run docs:build
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist
@@ -44,10 +54,51 @@ jobs:
   deploy:
     needs: build-docs
     runs-on: ubuntu-latest
+    name: Deploy
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Basic validation - check Pages site & sitemap
+        if: ${{ steps.deployment.outcome == 'success' }}
+        run: |
+          page_url="${{ steps.deployment.outputs.page_url }}"
+          echo "Checking site: ${page_url}"
+          # Basic check that site and sitemap are available
+          status=$(curl -s -o /dev/null -w "%{http_code}" "${page_url}")
+          if [ "${status}" -ne 200 ]; then
+            echo "Site not reachable: HTTP ${status}"
+            exit 1
+          fi
+          sitemap_url="${page_url}/sitemap.xml"
+          status=$(curl -s -o /dev/null -w "%{http_code}" "${sitemap_url}")
+          if [ "${status}" -ne 200 ]; then
+            echo "Sitemap not found at ${sitemap_url} (HTTP ${status})"
+            exit 1
+          fi
+
+      - name: Basic validation - check latest release semver
+        if: ${{ steps.deployment.outcome == 'success' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          repo="${{ github.repository }}"
+          echo "Checking latest release for ${repo}"
+          # Prefer repository secret GITHUB_TOKEN, fall back to GH_TOKEN
+          TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
+
+          # Get latest release tag (robust JSON parsing using python)
+          release_json=$(curl -s -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${repo}/releases/latest")
+          tag=$(echo "$release_json" | python -c 'import sys, json; j=json.load(sys.stdin); print(j.get("tag_name","") or "")')
+          if [ -z "$tag" ]; then
+            echo "No latest release found"
+          else
+            echo "Latest release: $tag"
+          fi

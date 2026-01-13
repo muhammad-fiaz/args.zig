@@ -170,7 +170,7 @@ var parser = try args.ArgumentParser.init(allocator, .{
 });
 ```
 
-See [Enabling Update Checker](/guide/disable-updates) for more details.
+See [Update Checker Configuration](/guide/updates) for more details.
 
 ## Next Steps
 
