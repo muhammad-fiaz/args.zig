@@ -88,40 +88,56 @@ pub fn generateHelp(allocator: std.mem.Allocator, spec: CommandSpec, use_colors:
         }
     }
 
-    if (has_options or spec.add_help or spec.add_version) {
+    const cfg = config.getConfig();
+
+    // 1. Grouped Options
+    for (spec.groups) |group| {
+        var has_group_options = false;
+        for (spec.args) |arg| {
+            if (arg.positional or arg.hidden) continue;
+            if (arg.group) |gname| {
+                if (utils.eql(gname, group.name)) {
+                    has_group_options = true;
+                    break;
+                }
+            }
+        }
+
+        if (has_group_options) {
+            try writer.print("{s}{s}:{s}\n", .{ yellow, group.name, reset });
+            if (group.description) |desc| {
+                try writer.print("  {s}{s}\n\n", .{ dim, desc });
+            }
+
+            for (spec.args) |arg| {
+                if (arg.positional or arg.hidden) continue;
+                if (arg.group) |gname| {
+                    if (utils.eql(gname, group.name)) {
+                        try printOption(writer, arg, cfg, use_colors);
+                    }
+                }
+            }
+            try writer.writeAll("\n");
+        }
+    }
+
+    // 2. Ungrouped Options
+    var has_ungrouped = false;
+    for (spec.args) |arg| {
+        if (!arg.positional and !arg.hidden and arg.group == null) {
+            has_ungrouped = true;
+            break;
+        }
+    }
+
+    if (has_ungrouped or spec.add_help or spec.add_version) {
         try writer.print("{s}OPTIONS:{s}\n", .{ yellow, reset });
-        const cfg = config.getConfig();
 
         for (spec.args) |arg| {
             if (arg.positional or arg.hidden) continue;
-            try writer.writeAll("    ");
-            if (arg.short) |s| {
-                try writer.print("{s}-{c}{s}", .{ green, s, reset });
-                if (arg.long != null) try writer.writeAll(", ") else try writer.writeAll("  ");
-            } else {
-                try writer.writeAll("    ");
+            if (arg.group == null) {
+                try printOption(writer, arg, cfg, use_colors);
             }
-            var opt_len: usize = 4;
-            if (arg.long) |l| {
-                try writer.print("{s}--{s}{s}", .{ green, l, reset });
-                opt_len += l.len + 2;
-            }
-            if (!arg.isFlag()) {
-                const metavar = arg.metavar orelse arg.value_type.typeName();
-                try writer.print(" <{s}>", .{metavar});
-                opt_len += metavar.len + 3;
-            }
-            const padding = if (opt_len < 24) 24 - opt_len else 2;
-            try writer.writeByteNTimes(' ', padding);
-            if (arg.help) |h| try writer.writeAll(h);
-            if (cfg.show_defaults) {
-                if (arg.default) |d| try writer.print(" {s}[default: {s}]{s}", .{ dim, d, reset });
-            }
-            if (cfg.show_env_vars) {
-                if (arg.env_var) |e| try writer.print(" {s}[env: {s}]{s}", .{ dim, e, reset });
-            }
-            if (arg.deprecated) |dep| try writer.print(" {s}[DEPRECATED: {s}]{s}", .{ yellow, dep, reset });
-            try writer.writeAll("\n");
         }
 
         if (spec.add_help) {
@@ -140,6 +156,52 @@ pub fn generateHelp(allocator: std.mem.Allocator, spec: CommandSpec, use_colors:
     if (spec.epilog) |epilog| try writer.print("\n{s}\n", .{epilog});
 
     return result.toOwnedSlice(allocator);
+}
+
+fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bool) !void {
+    const reset = Color.get(Color.reset, use_colors);
+    const green = Color.get(Color.green, use_colors);
+    const dim = Color.get(Color.dim, use_colors);
+    const yellow = Color.get(Color.yellow, use_colors);
+
+    try writer.writeAll("    ");
+    if (arg.short) |s| {
+        try writer.print("{s}-{c}{s}", .{ green, s, reset });
+        if (arg.long != null) try writer.writeAll(", ") else try writer.writeAll("  ");
+    } else {
+        try writer.writeAll("    ");
+    }
+    var opt_len: usize = 4;
+    if (arg.long) |l| {
+        try writer.print("{s}--{s}{s}", .{ green, l, reset });
+        opt_len += l.len + 2;
+    }
+    if (!arg.isFlag()) {
+        const metavar = arg.metavar orelse arg.value_type.typeName();
+        try writer.print(" <{s}>", .{metavar});
+        opt_len += metavar.len + 3;
+    }
+    const padding = if (opt_len < 24) 24 - opt_len else 2;
+    try writer.writeByteNTimes(' ', padding);
+    if (arg.help) |h| try writer.writeAll(h);
+
+    if (arg.choices.len > 0) {
+        try writer.print(" {s}[choices: ", .{dim});
+        for (arg.choices, 0..) |choice, i| {
+            try writer.print("{s}", .{choice});
+            if (i < arg.choices.len - 1) try writer.writeAll(", ");
+        }
+        try writer.print("]{s}", .{reset});
+    }
+
+    if (cfg.show_defaults) {
+        if (arg.default) |d| try writer.print(" {s}[default: {s}]{s}", .{ dim, d, reset });
+    }
+    if (cfg.show_env_vars) {
+        if (arg.env_var) |e| try writer.print(" {s}[env: {s}]{s}", .{ dim, e, reset });
+    }
+    if (arg.deprecated) |dep| try writer.print(" {s}[DEPRECATED: {s}]{s}", .{ yellow, dep, reset });
+    try writer.writeAll("\n");
 }
 
 /// Generate a short usage line.

@@ -155,22 +155,22 @@ std.debug.print("Major: {d}, Minor: {d}, Patch: {d}\n", .{
 std.debug.print("Requires Zig: {s}+\n", .{args.MINIMUM_ZIG_VERSION});
 ```
 
-## Disabling Update Checker
+## Enabling Update Checker
 
-By default, args.zig checks for updates. To disable:
+By default, args.zig update checker is **disabled**. To enable it:
 
 ```zig
-// Method 1: Global disable
-args.disableUpdateCheck();
+// Method 1: Global enable
+args.enableUpdateCheck();
 
-// Method 2: Use minimal config
+// Method 2: Per-parser config
 var parser = try args.ArgumentParser.init(allocator, .{
     .name = "myapp",
-    .config = args.Config.minimal(),
+    .config = .{ .check_for_updates = true },
 });
 ```
 
-See [Disabling Update Checker](/guide/disable-updates) for more details.
+See [Enabling Update Checker](/guide/disable-updates) for more details.
 
 ## Next Steps
 

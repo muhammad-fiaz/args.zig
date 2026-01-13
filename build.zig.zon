@@ -1,6 +1,6 @@
 .{
     .name = .args,
-    .version = "0.0.1",
+    .version = "0.0.2",
     .fingerprint = 0x161b2ea26ee01cf2,
     .minimum_zig_version = "0.15.0",
     .dependencies = .{},

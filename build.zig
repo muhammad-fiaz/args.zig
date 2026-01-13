@@ -17,8 +17,12 @@ pub fn build(b: *std.Build) void {
     const examples = [_]struct { name: []const u8, path: []const u8, skip_run_all: bool = false }{
         .{ .name = "basic", .path = "examples/basic.zig" },
         .{ .name = "advanced", .path = "examples/advanced.zig" },
-        .{ .name = "update-check", .path = "examples/update_check.zig", .skip_run_all = true },
+        .{ .name = "update_check", .path = "examples/update_check.zig", .skip_run_all = true },
     };
+
+    // Create run-all-examples step that runs all examples sequentially
+    const run_all_examples = b.step("run-all-examples", "Run all examples sequentially");
+    var previous_run_step: ?*std.Build.Step = null;
 
     inline for (examples) |example| {
         const exe = b.addExecutable(.{
@@ -27,10 +31,15 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path(example.path),
                 .target = target,
                 .optimize = optimize,
+                .link_libc = true,
             }),
         });
         exe.root_module.addImport("args", args_module);
-        exe.linkLibC();
+
+        // Link ws2_32 on Windows for networking examples
+        if (target.result.os.tag == .windows) {
+            exe.root_module.linkSystemLibrary("ws2_32", .{});
+        }
 
         const install_exe = b.addInstallArtifact(exe, .{});
         const example_step = b.step("example-" ++ example.name, "Build " ++ example.name ++ " example");
@@ -44,35 +53,18 @@ pub fn build(b: *std.Build) void {
 
         const run_step = b.step("run-" ++ example.name, "Run " ++ example.name ++ " example");
         run_step.dependOn(&run_exe.step);
-    }
 
-    // Create run-all-examples step that runs all examples sequentially
-    const run_all_examples = b.step("run-all-examples", "Run all examples sequentially");
-    var previous_run_step: ?*std.Build.Step = null;
+        if (!example.skip_run_all) {
+            // Re-use the same executable artifact for run-all sequence
+            const run_all_exe = b.addRunArtifact(exe);
+            run_all_exe.addArg("--help");
 
-    inline for (examples) |example| {
-        if (example.skip_run_all) continue;
-        const exe = b.addExecutable(.{
-            .name = "run-all-" ++ example.name,
-            .root_module = b.createModule(.{
-                .root_source_file = b.path(example.path),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        exe.root_module.addImport("args", args_module);
-        exe.linkLibC();
-
-        const install_exe = b.addInstallArtifact(exe, .{});
-        const run_exe = b.addRunArtifact(exe);
-        run_exe.step.dependOn(&install_exe.step);
-        run_exe.addArg("--help");
-
-        // Make each run step depend on the previous run step to ensure sequential execution
-        if (previous_run_step) |prev| {
-            run_exe.step.dependOn(prev);
+            // Make each run step depend on the previous run step to ensure sequential execution
+            if (previous_run_step) |prev| {
+                run_all_exe.step.dependOn(prev);
+            }
+            previous_run_step = &run_all_exe.step;
         }
-        previous_run_step = &run_exe.step;
     }
 
     if (previous_run_step) |last| {
@@ -85,9 +77,13 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/args.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
-    tests.linkLibC();
+
+    if (target.result.os.tag == .windows) {
+        tests.root_module.linkSystemLibrary("ws2_32", .{});
+    }
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");
@@ -100,10 +96,14 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("bench/benchmark.zig"),
             .target = target,
             .optimize = .ReleaseFast,
+            .link_libc = true,
         }),
     });
     bench_exe.root_module.addImport("args", args_module);
-    bench_exe.linkLibC();
+
+    if (target.result.os.tag == .windows) {
+        bench_exe.root_module.linkSystemLibrary("ws2_32", .{});
+    }
 
     const install_bench = b.addInstallArtifact(bench_exe, .{});
     const run_bench = b.addRunArtifact(bench_exe);
@@ -111,6 +111,23 @@ pub fn build(b: *std.Build) void {
 
     const bench_step = b.step("bench", "Run benchmarks");
     bench_step.dependOn(&run_bench.step);
+
+    // Docs generation
+    const docs_step = b.step("docs", "Generate documentation");
+    const docs_obj = b.addObject(.{
+        .name = "args",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/args.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs_obj.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    docs_step.dependOn(&install_docs.step);
 
     // Create comprehensive test-all step that runs everything sequentially
     const test_all_step = b.step("test-all", "Run all tests, benchmarks, and examples sequentially");
@@ -132,25 +149,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/args.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
     b.installArtifact(lib);
-
-    // Check step (Bonus: handy for LSP)
-    const check_step = b.step("check", "Check for compilation errors");
-    const check_main = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/args.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    check_step.dependOn(&check_main.step);
-
-    // Format step
-    const fmt_step = b.step("fmt", "Format source code");
-    const fmt = b.addFmt(.{
-        .paths = &.{ "src", "examples", "bench", "build.zig" },
-    });
-    fmt_step.dependOn(&fmt.step);
 }

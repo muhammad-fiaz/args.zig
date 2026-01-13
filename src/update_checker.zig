@@ -71,12 +71,13 @@ pub fn printUpdateNotification(current: []const u8, latest: []const u8, url: []c
     const reset = utils.Color.reset;
     const bold = utils.Color.bold;
 
-    std.debug.print("\n", .{});
-    std.debug.print("{s}╭─────────────────────────────────────────────────────────╮{s}\n", .{ yellow, reset });
-    std.debug.print("{s}│{s}  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n", .{ yellow, reset, bold, reset, cyan, current, reset, green, latest, reset, yellow, reset });
-    std.debug.print("{s}│{s}  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n", .{ yellow, reset, cyan, url, reset, yellow, reset });
-    std.debug.print("{s}╰─────────────────────────────────────────────────────────╯{s}\n", .{ yellow, reset });
-    std.debug.print("\n", .{});
+    const stderr = std.io.getStdErr().writer();
+    stderr.print("\n", .{}) catch {};
+    stderr.print("{s}╭─────────────────────────────────────────────────────────╮{s}\n", .{ yellow, reset }) catch {};
+    stderr.print("{s}│{s}  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n", .{ yellow, reset, bold, reset, cyan, current, reset, green, latest, reset, yellow, reset }) catch {};
+    stderr.print("{s}│{s}  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n", .{ yellow, reset, cyan, url, reset, yellow, reset }) catch {};
+    stderr.print("{s}╰─────────────────────────────────────────────────────────╯{s}\n", .{ yellow, reset }) catch {};
+    stderr.print("\n", .{}) catch {};
 }
 
 /// Get the current library version.

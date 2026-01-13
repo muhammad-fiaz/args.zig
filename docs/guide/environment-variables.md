@@ -61,16 +61,24 @@ myapp
 
 ## Environment Variable Prefix
 
-Set a global prefix for all environment variables:
+Set a global prefix for all environment variables. When a prefix is set, args.zig will also automatically look for environment variables named `PREFIX_NAME` (where NAME is the argument name in uppercase) even if `.env_var` is not explicitly set on the argument.
 
 ```zig
 var parser = try args.ArgumentParser.init(allocator, .{
     .name = "myapp",
-    .config = .{ .env_prefix = "MYAPP_" },
+    .config = .{ .env_prefix = "MYAPP" }, // e.g. "MYAPP"
 });
 
+// Explicit environment variable (falls back to MYAPP_CONFIG_FILE if CONFIG_FILE not found? No, explicit takes precedence)
+// Current logic: If .env_var is set, use it. If not, use PREFIX_ARGNAME.
 try parser.addOption("config", .{
-    .env_var = "CONFIG",  // Will actually check MYAPP_CONFIG
+    .help = "Config file",
+    // No .env_var set, but with prefix "MYAPP", it will look for "MYAPP_CONFIG"
+});
+
+try parser.addOption("port", .{
+    .help = "Port",
+    .env_var = "SERVICE_PORT", // Will look for "SERVICE_PORT" (ignores prefix if explicit env_var set)
 });
 ```
 

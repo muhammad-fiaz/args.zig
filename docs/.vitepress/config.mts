@@ -9,6 +9,9 @@ export const SITE_DESCRIPTION = "A fast, powerful, and developer-friendly comman
 export const GA_ID = "G-6BVYCRK57P";
 export const GTM_ID = "GTM-P4M9T8ZR";
 
+// Google AdSense Client ID
+export const ADSENSE_CLIENT_ID = "ca-pub-2040560600290490";
+
 // SEO Keywords
 export const KEYWORDS = "zig, argument parser, cli, command line, argparse, shell completions, bash completion, zsh completion, fish completion, powershell completion, environment variables, subcommands, zig library, cli parsing";
 
@@ -25,6 +28,8 @@ export default defineConfig({
   },
 
   head: [
+    ["meta", { name: "viewport", content: "width=device-width, initial-scale=1.0" }],
+    ["meta", { name: "google-adsense-account", content: ADSENSE_CLIENT_ID }],
     // Primary Meta Tags
     ["meta", { name: "title", content: SITE_NAME }],
     ["meta", { name: "description", content: SITE_DESCRIPTION }],
@@ -171,6 +176,16 @@ gtag('config', '${GA_ID}');`,
           ],
         ] as [string, Record<string, string>, string][])
       : []),
+    
+    // Google AdSense
+    [
+      "script",
+      {
+        async: "",
+        src: `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT_ID}`,
+        crossorigin: "anonymous",
+      },
+    ],
   ],
 
   ignoreDeadLinks: [/.*\.zig$/],
@@ -229,6 +244,8 @@ gtag('config', '${GA_ID}');`,
           text: "Advanced",
           items: [
             { text: "Environment Variables", link: "/guide/environment-variables" },
+            { text: "Argument Groups", link: "/guide/groups" },
+            { text: "Validation", link: "/guide/validation" },
             { text: "Shell Completions", link: "/guide/shell-completions" },
             { text: "Efficiency & Utilities", link: "/guide/efficiency" },
             { text: "Configuration", link: "/guide/configuration" },

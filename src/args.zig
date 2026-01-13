@@ -28,6 +28,7 @@ pub const ParsingMode = types.ParsingMode;
 pub const ArgSpec = schema.ArgSpec;
 pub const CommandSpec = schema.CommandSpec;
 pub const SubcommandSpec = schema.SubcommandSpec;
+pub const ArgumentGroup = schema.ArgumentGroup;
 pub const SchemaBuilder = schema.SchemaBuilder;
 pub const Config = config.Config;
 pub const Shell = completion.Shell;
@@ -50,7 +51,9 @@ pub const ArgumentParser = struct {
     description: ?[]const u8 = null,
     epilog: ?[]const u8 = null,
     args: std.ArrayListUnmanaged(ArgSpec),
+    groups: std.ArrayListUnmanaged(ArgumentGroup),
     subcommands: std.ArrayListUnmanaged(SubcommandSpec),
+    current_group: ?*ArgumentGroup = null,
     add_help: bool = true,
     add_version: bool = true,
     cfg: Config,
@@ -82,6 +85,7 @@ pub const ArgumentParser = struct {
             .description = options.description,
             .epilog = options.epilog,
             .args = .empty,
+            .groups = .empty,
             .subcommands = .empty,
             .add_help = options.add_help,
             .add_version = options.add_version,
@@ -93,12 +97,18 @@ pub const ArgumentParser = struct {
     /// Clean up resources.
     pub fn deinit(self: *ArgumentParser) void {
         self.args.deinit(self.allocator);
+        for (self.groups.items) |*g| g.deinit(self.allocator);
+        self.groups.deinit(self.allocator);
         self.subcommands.deinit(self.allocator);
     }
 
     /// Add an argument with full specification.
     pub fn addArg(self: *ArgumentParser, spec: ArgSpec) !void {
-        try self.args.append(self.allocator, spec);
+        var s = spec;
+        if (self.current_group) |group| {
+            s.group = group.name;
+        }
+        try self.args.append(self.allocator, s);
     }
 
     /// Add a boolean flag (--verbose, -v).
@@ -107,12 +117,14 @@ pub const ArgumentParser = struct {
         help: ?[]const u8 = null,
         dest: ?[]const u8 = null,
         hidden: bool = false,
+        aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
     }) !void {
-        try self.args.append(self.allocator, .{
+        try self.addArg(.{
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .action = .store_true,
             .dest = options.dest,
@@ -133,12 +145,15 @@ pub const ArgumentParser = struct {
         dest: ?[]const u8 = null,
         env_var: ?[]const u8 = null,
         hidden: bool = false,
+        aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
     }) !void {
-        try self.args.append(self.allocator, .{
+        try self.addArg(.{
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .value_type = options.value_type,
             .default = options.default,
@@ -149,6 +164,7 @@ pub const ArgumentParser = struct {
             .env_var = options.env_var,
             .hidden = options.hidden,
             .deprecated = options.deprecated,
+            .validator = options.validator,
         });
     }
 
@@ -161,7 +177,7 @@ pub const ArgumentParser = struct {
         nargs: Nargs = .{ .exact = 1 },
         metavar: ?[]const u8 = null,
     }) !void {
-        try self.args.append(self.allocator, .{
+        try self.addArg(.{
             .name = name,
             .help = options.help,
             .value_type = options.value_type,
@@ -179,7 +195,7 @@ pub const ArgumentParser = struct {
         help: ?[]const u8 = null,
         dest: ?[]const u8 = null,
     }) !void {
-        try self.args.append(self.allocator, .{
+        try self.addArg(.{
             .name = name,
             .short = options.short,
             .long = name,
@@ -202,6 +218,7 @@ pub const ArgumentParser = struct {
             .version = self.version,
             .description = self.description,
             .args = self.args.items,
+            .groups = self.groups.items,
             .subcommands = self.subcommands.items,
             .epilog = self.epilog,
             .add_help = self.add_help,
@@ -270,11 +287,13 @@ pub const ArgumentParser = struct {
         help: ?[]const u8 = null,
         metavar: ?[]const u8 = null,
         dest: ?[]const u8 = null,
+        aliases: []const []const u8 = &.{},
     }) !void {
         try self.args.append(self.allocator, .{
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .action = .append,
             .metavar = options.metavar,
@@ -290,6 +309,7 @@ pub const ArgumentParser = struct {
         min: usize = 1,
         max: ?usize = null,
         metavar: ?[]const u8 = null,
+        aliases: []const []const u8 = &.{},
     }) !void {
         const nargs: Nargs = if (options.min == 0)
             .zero_or_more
@@ -302,6 +322,7 @@ pub const ArgumentParser = struct {
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .nargs = nargs,
             .metavar = options.metavar,
@@ -309,10 +330,36 @@ pub const ArgumentParser = struct {
     }
 
     /// Set the argument group for subsequent arguments.
-    pub fn setGroup(self: *ArgumentParser, group_name: []const u8) void {
-        _ = self;
-        _ = group_name;
-        // Group tracking would be implemented here
+    /// Set the argument group for subsequent arguments.
+    /// If group_name is null, resets to default (no group).
+    pub fn setGroup(self: *ArgumentParser, group_name: ?[]const u8) void {
+        if (group_name) |name| {
+            for (self.groups.items) |*g| {
+                if (utils.eql(g.name, name)) {
+                    self.current_group = g;
+                    return;
+                }
+            }
+            // Group must be created first via addArgumentGroup.
+            self.current_group = null;
+        } else {
+            self.current_group = null;
+        }
+    }
+
+    /// Add a new argument group and set it as current.
+    pub fn addArgumentGroup(self: *ArgumentParser, name: []const u8, options: struct {
+        description: ?[]const u8 = null,
+        exclusive: bool = false,
+        required: bool = false,
+    }) !void {
+        try self.groups.append(self.allocator, .{
+            .name = name,
+            .description = options.description,
+            .exclusive = options.exclusive,
+            .required = options.required,
+        });
+        self.current_group = &self.groups.items[self.groups.items.len - 1];
     }
 
     /// Add an option with environment variable fallback and programmatic default.
@@ -325,12 +372,14 @@ pub const ArgumentParser = struct {
             short: ?u8 = null,
             help: ?[]const u8 = null,
             value_type: ValueType = .string,
+            aliases: []const []const u8 = &.{},
         },
     ) !void {
         try self.args.append(self.allocator, .{
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .value_type = options.value_type,
             .env_var = env_var,
@@ -402,11 +451,13 @@ pub const ArgumentParser = struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
         value_type: ValueType = .string,
+        aliases: []const []const u8 = &.{},
     }) !void {
         try self.args.append(self.allocator, .{
             .name = name,
             .short = options.short,
             .long = name,
+            .aliases = options.aliases,
             .help = options.help,
             .value_type = options.value_type,
             .deprecated = warning,
@@ -675,7 +726,7 @@ test "disableUpdateCheck and enableUpdateCheck" {
 
 test "getLibraryVersion" {
     const ver = getLibraryVersion();
-    try std.testing.expectEqualStrings("0.0.1", ver);
+    try std.testing.expectEqualStrings("0.0.2", ver);
 }
 
 test "ArgumentParser subcommand" {

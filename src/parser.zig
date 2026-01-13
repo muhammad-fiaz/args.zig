@@ -39,6 +39,9 @@ pub const Parser = struct {
         for (self.spec.args) |*arg| {
             if (arg.short) |s| try self.short_map.put(s, arg);
             if (arg.long) |l| try self.long_map.put(l, arg);
+            for (arg.aliases) |alias| {
+                try self.long_map.put(alias, arg);
+            }
         }
 
         return self;
@@ -102,8 +105,63 @@ pub const Parser = struct {
             }
         }
 
+        try self.processEnvVars(&result);
         try self.validateRequired(&result);
+        try self.validateGroups(&result);
         return result;
+    }
+
+    fn processEnvVars(self: *Parser, result: *ParseResult) !void {
+        for (self.spec.args) |arg| {
+            if (result.contains(arg.getDestination())) continue;
+
+            var env_key_buf: [256]u8 = undefined;
+            var env_key: ?[]const u8 = null;
+
+            if (arg.env_var) |env| {
+                env_key = env;
+            } else if (self.cfg.env_prefix) |prefix| {
+                // Determine name: use long option name or arg name
+                const name = arg.long orelse arg.name;
+                // Format: PREFIX_NAME (uppercase)
+                const full_len = prefix.len + 1 + name.len;
+                if (full_len <= env_key_buf.len) {
+                    @memcpy(env_key_buf[0..prefix.len], prefix);
+                    env_key_buf[prefix.len] = '_';
+                    @memcpy(env_key_buf[prefix.len + 1 ..][0..name.len], name);
+
+                    const slice = env_key_buf[0..full_len];
+                    for (slice) |*c| c.* = std.ascii.toUpper(c.*);
+                    env_key = slice;
+                }
+            }
+
+            if (env_key) |key| {
+                if (std.process.getEnvVarOwned(self.allocator, key)) |env_val| {
+                    defer self.allocator.free(env_val);
+                    const value = try validation.parseValue(env_val, arg.value_type, self.allocator);
+                    try result.values.put(arg.getDestination(), value);
+                } else |_| {}
+            }
+        }
+    }
+
+    fn validateGroups(self: *Parser, result: *ParseResult) !void {
+        for (self.spec.groups) |group| {
+            var found_count: usize = 0;
+            for (self.spec.args) |arg| {
+                if (arg.group) |gname| {
+                    if (utils.eql(gname, group.name)) {
+                        if (result.contains(arg.getDestination())) {
+                            found_count += 1;
+                        }
+                    }
+                }
+            }
+
+            if (group.exclusive and found_count > 1) return errors.ParseError.MutuallyExclusive;
+            if (group.required and found_count == 0) return errors.ParseError.MissingRequired;
+        }
     }
 
     fn handleOption(self: *Parser, tok: Token, tokenizer: *Tokenizer, result: *ParseResult, is_short: bool) !void {
@@ -160,6 +218,12 @@ pub const Parser = struct {
                 if (next.token_type != .value) return errors.ParseError.MissingValue;
                 _ = tokenizer.next();
                 const value = try validation.parseValue(next.raw, spec.value_type, self.allocator);
+                if (spec.validator) |v| {
+                    const res = v(next.raw);
+                    if (!res.isOk()) {
+                        return errors.ValidationError.CustomValidationFailed;
+                    }
+                }
                 if (spec.choices.len > 0 and !validation.validateChoice(next.raw, spec.choices)) {
                     return errors.ParseError.InvalidChoice;
                 }
@@ -196,6 +260,13 @@ pub const Parser = struct {
         const dest = spec.getDestination();
         const value = try validation.parseValue(value_str, spec.value_type, self.allocator);
 
+        if (spec.validator) |v| {
+            const res = v(value_str);
+            if (!res.isOk()) {
+                return errors.ValidationError.CustomValidationFailed;
+            }
+        }
+
         if (spec.choices.len > 0 and !validation.validateChoice(value_str, spec.choices)) {
             return errors.ParseError.InvalidChoice;
         }
@@ -209,6 +280,12 @@ pub const Parser = struct {
             if (arg.positional) {
                 if (pos_idx == index) {
                     const value = try validation.parseValue(value_str, arg.value_type, self.allocator);
+                    if (arg.validator) |v| {
+                        const res = v(value_str);
+                        if (!res.isOk()) {
+                            return errors.ValidationError.CustomValidationFailed;
+                        }
+                    }
                     try result.values.put(arg.getDestination(), value);
                     return;
                 }
@@ -221,14 +298,6 @@ pub const Parser = struct {
     fn validateRequired(self: *Parser, result: *ParseResult) !void {
         for (self.spec.args) |arg| {
             if (arg.required and !result.contains(arg.getDestination())) {
-                if (arg.env_var) |env| {
-                    if (std.process.getEnvVarOwned(self.allocator, env)) |env_val| {
-                        defer self.allocator.free(env_val);
-                        const value = try validation.parseValue(env_val, arg.value_type, self.allocator);
-                        try result.values.put(arg.getDestination(), value);
-                        continue;
-                    } else |_| {}
-                }
                 return errors.ParseError.MissingRequired;
             }
         }
@@ -370,4 +439,142 @@ test "Parser separator handling" {
 
     try std.testing.expectEqual(@as(usize, 2), result.remaining.items.len);
     try std.testing.expectEqualStrings("--not-option", result.remaining.items[0]);
+}
+
+test "Parser argument groups exclusive" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .groups = &[_]schema_mod.ArgumentGroup{
+            .{ .name = "mode", .exclusive = true },
+        },
+        .args = &[_]ArgSpec{
+            .{ .name = "server", .long = "server", .action = .store_true, .group = "mode" },
+            .{ .name = "client", .long = "client", .action = .store_true, .group = "mode" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec);
+    defer parser.deinit();
+
+    // Case 1: One option (valid)
+    {
+        const args = [_][]const u8{"--server"};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getBool("server").?);
+    }
+
+    // Case 2: Both options (invalid)
+    {
+        const args = [_][]const u8{ "--server", "--client" };
+        try std.testing.expectError(errors.ParseError.MutuallyExclusive, parser.parse(&args));
+    }
+}
+
+test "Parser custom validator" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const Validator = struct {
+        fn check(val: []const u8) validation.ValidationResult {
+            if (val.len < 3) return .{ .err = "too short" };
+            return .{ .ok = {} };
+        }
+    };
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "name", .long = "name", .validator = Validator.check },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec);
+    defer parser.deinit();
+
+    // Case 1: Valid input
+    {
+        const args = [_][]const u8{ "--name", "foo" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("foo", result.getString("name").?);
+    }
+
+    {
+        const args = [_][]const u8{ "--name", "fo" };
+        try std.testing.expectError(errors.ValidationError.CustomValidationFailed, parser.parse(&args));
+    }
+}
+
+test "Parser aliases" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "verbose", .long = "verbose", .aliases = &[_][]const u8{ "verb", "lvl" }, .action = .store_true },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec);
+    defer parser.deinit();
+
+    // Original long name
+    {
+        const args = [_][]const u8{"--verbose"};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getBool("verbose").?);
+    }
+
+    // Alias 1
+    {
+        const args = [_][]const u8{"--verb"};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getBool("verbose").?);
+    }
+
+    {
+        const args = [_][]const u8{"--lvl"};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getBool("verbose").?);
+    }
+}
+
+test "Parser environment variables" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "host", .long = "host", .env_var = "TEST_HOST" },
+            .{ .name = "port", .long = "port", .value_type = .int, .env_var = "TEST_PORT" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec);
+    defer parser.deinit();
+
+    // Verify that the parser handles missing environment variables gracefully.
+    // Note: Use a mock or specific platform logic for full environment variable testing.
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expect(result.getString("host") == null);
 }

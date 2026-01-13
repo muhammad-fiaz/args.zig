@@ -17,7 +17,7 @@ args.zig provides flexible configuration options to customize parser behavior.
 const args = @import("args");
 
 const Config = struct {
-    check_for_updates: bool = true,
+    check_for_updates: bool = false,
     show_update_notification: bool = true,
     use_colors: bool = true,
     help_line_width: usize = 80,
@@ -41,7 +41,7 @@ const Config = struct {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `check_for_updates` | `true` | Check for new versions on GitHub |
+| `check_for_updates` | `false` | Check for new versions on GitHub |
 | `show_update_notification` | `true` | Display notification if update available |
 
 ### Display Options

@@ -1,15 +1,15 @@
 ---
-title: Disabling Update Checker
-description: Learn how to disable the optional update checker in args.zig for air-gapped environments or CI/CD pipelines.
+title: Update Checker Configuration
+description: Learn how to configure the update checker in args.zig.
 head:
   - - meta
     - name: keywords
       content: zig, args.zig, update checker, disable updates, configuration
 ---
 
-# Disabling Update Checker
+# Update Checker Configuration
 
-args.zig includes an optional non-blocking update checker that notifies users when a new version is available. This guide explains how to disable or configure this feature.
+args.zig includes an optional non-blocking update checker that notifies users when a new version is available. By default, this feature is **enabled**. This guide explains how to configure or disable it.
 
 ## Why Disable?
 
@@ -36,9 +36,7 @@ pub fn main() !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
     });
-    defer parser.deinit();
-    
-    // ... rest of your code
+    // ...
 }
 ```
 
@@ -56,7 +54,17 @@ var parser = try args.ArgumentParser.init(allocator, .{
 });
 ```
 
-### Method 3: Minimal Configuration Preset
+### Method 3: Global Configuration
+
+Set global configuration before creating any parsers:
+
+```zig
+args.initConfig(.{
+    .check_for_updates = false,
+});
+```
+
+### Method 4: Minimal Configuration Preset
 
 Use the minimal preset which disables updates and other features:
 
@@ -67,38 +75,6 @@ var parser = try args.ArgumentParser.init(allocator, .{
 });
 ```
 
-The minimal preset sets:
-- `check_for_updates = false`
-- `show_update_notification = false`
-- `use_colors = false`
-- `show_defaults = false`
-- `show_env_vars = false`
-- `exit_on_error = false`
-
-### Method 4: Global Configuration
-
-Set global configuration before creating any parsers:
-
-```zig
-args.initConfig(.{
-    .check_for_updates = false,
-    .show_update_notification = false,
-});
-
-// All parsers will inherit this config
-var parser = try args.ArgumentParser.init(allocator, .{
-    .name = "myapp",
-});
-```
-
-## Re-enabling Update Checks
-
-If you've disabled update checks and want to re-enable them:
-
-```zig
-args.enableUpdateCheck();
-```
-
 ## How Update Checking Works
 
 When enabled, the update checker:
@@ -106,12 +82,12 @@ When enabled, the update checker:
 1. Runs in a **background thread** (non-blocking)
 2. Checks GitHub releases for the latest version
 3. Compares with the current library version
-4. Prints a notification if a newer version is available
+4. Prints a notification if a newer version is available (to stderr)
 
 The check is:
 - **Non-blocking**: Won't slow down your application startup
-- **Silent on failure**: Network errors are silently ignored
-- **Respects configuration**: Can be disabled completely
+- **Silent on failure**: Network errors are silently ignored and do not impact the application
+- **Respects configuration**: Can be enabled/disabled completely
 
 ## Example: Conditional Update Checking
 
@@ -151,31 +127,3 @@ When an update is available, the notification looks like:
 ╰─────────────────────────────────────────────────────────╯
 ```
 
-## Complete Example
-
-```zig
-const std = @import("std");
-const args = @import("args");
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Option 1: Use minimal config (disables updates)
-    var parser = try args.ArgumentParser.init(allocator, .{
-        .name = "myapp",
-        .version = "1.0.0",
-        .description = "My application with updates disabled",
-        .config = args.Config.minimal(),
-    });
-    defer parser.deinit();
-
-    try parser.addFlag("verbose", .{ .short = 'v' });
-
-    var result = try parser.parseProcess();
-    defer result.deinit();
-
-    // Your application logic here
-}
-```

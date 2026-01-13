@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const types = @import("types.zig");
+const validation = @import("validation.zig");
 
 pub const ValueType = types.ValueType;
 pub const ArgAction = types.ArgAction;
@@ -14,6 +15,7 @@ pub const ArgSpec = struct {
     name: []const u8,
     short: ?u8 = null,
     long: ?[]const u8 = null,
+    aliases: []const []const u8 = &.{},
     help: ?[]const u8 = null,
     value_type: ValueType = .string,
     action: ArgAction = .store,
@@ -28,6 +30,7 @@ pub const ArgSpec = struct {
     hidden: bool = false,
     group: ?[]const u8 = null,
     deprecated: ?[]const u8 = null,
+    validator: ?validation.ValidatorFn = null,
 
     /// Get the destination name for storing the value.
     pub fn getDestination(self: *const ArgSpec) []const u8 {
@@ -75,12 +78,26 @@ pub const SubcommandSpec = struct {
     }
 };
 
+/// Specification for an argument group.
+pub const ArgumentGroup = struct {
+    name: []const u8,
+    description: ?[]const u8 = null,
+    args: std.ArrayListUnmanaged(ArgSpec) = .empty,
+    exclusive: bool = false,
+    required: bool = false,
+
+    pub fn deinit(self: *ArgumentGroup, allocator: std.mem.Allocator) void {
+        self.args.deinit(allocator);
+    }
+};
+
 /// Full command specification.
 pub const CommandSpec = struct {
     name: []const u8,
     version: ?[]const u8 = null,
     description: ?[]const u8 = null,
     args: []const ArgSpec = &.{},
+    groups: []const ArgumentGroup = &.{},
     subcommands: []const SubcommandSpec = &.{},
     epilog: ?[]const u8 = null,
     allow_interspersed: bool = true,
@@ -114,6 +131,7 @@ pub const SchemaBuilder = struct {
     version: ?[]const u8 = null,
     description: ?[]const u8 = null,
     args: std.ArrayListUnmanaged(ArgSpec),
+    groups: std.ArrayListUnmanaged(ArgumentGroup),
     subcommands: std.ArrayListUnmanaged(SubcommandSpec),
     epilog: ?[]const u8 = null,
     add_help: bool = true,
@@ -124,12 +142,15 @@ pub const SchemaBuilder = struct {
             .allocator = allocator,
             .name = name,
             .args = .empty,
+            .groups = .empty,
             .subcommands = .empty,
         };
     }
 
     pub fn deinit(self: *SchemaBuilder) void {
         self.args.deinit(self.allocator);
+        for (self.groups.items) |*g| g.deinit(self.allocator);
+        self.groups.deinit(self.allocator);
         self.subcommands.deinit(self.allocator);
     }
 
@@ -195,6 +216,7 @@ pub const SchemaBuilder = struct {
             .version = self.version,
             .description = self.description,
             .args = self.args.items,
+            .groups = self.groups.items,
             .subcommands = self.subcommands.items,
             .epilog = self.epilog,
             .add_help = self.add_help,
@@ -212,6 +234,9 @@ test "ArgSpec.getDestination" {
 
     const spec3 = ArgSpec{ .name = "file", .positional = true };
     try std.testing.expectEqualStrings("file", spec3.getDestination());
+
+    const spec4 = ArgSpec{ .name = "item", .aliases = &[_][]const u8{"i"} };
+    try std.testing.expectEqualStrings("item", spec4.getDestination());
 }
 
 test "ArgSpec.isFlag" {

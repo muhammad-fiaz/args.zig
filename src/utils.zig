@@ -3,10 +3,6 @@
 
 const std = @import("std");
 
-// ============================================================================
-// String Utilities
-// ============================================================================
-
 /// Fast string equality check.
 pub inline fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -70,10 +66,6 @@ pub fn join(allocator: std.mem.Allocator, strings: []const []const u8, separator
     return result;
 }
 
-// ============================================================================
-// ANSI Color Codes (compile-time constants for zero runtime cost)
-// ============================================================================
-
 pub const Color = struct {
     pub const reset = "\x1b[0m";
     pub const bold = "\x1b[1m";
@@ -107,10 +99,6 @@ pub const Color = struct {
     }
 };
 
-// ============================================================================
-// Number Parsing (optimized versions)
-// ============================================================================
-
 /// Parse integer with error handling.
 pub inline fn parseInt(comptime T: type, s: []const u8) ?T {
     return std.fmt.parseInt(T, s, 10) catch null;
@@ -125,10 +113,6 @@ pub inline fn parseUint(comptime T: type, s: []const u8) ?T {
 pub inline fn parseFloat(s: []const u8) ?f64 {
     return std.fmt.parseFloat(f64, s) catch null;
 }
-
-// ============================================================================
-// Memory Utilities
-// ============================================================================
 
 /// Create an ArrayList writer for building strings.
 pub inline fn stringWriter(allocator: std.mem.Allocator) std.ArrayListUnmanaged(u8).Writer {
@@ -145,10 +129,6 @@ pub inline fn calcPadding(current_len: usize, target_len: usize) usize {
 pub inline fn writeSpaces(writer: anytype, count: usize) !void {
     try writer.writeByteNTimes(' ', count);
 }
-
-// ============================================================================
-// Boolean Parsing
-// ============================================================================
 
 /// Parse common boolean string representations.
 /// Optimized with inline and early returns.
@@ -174,10 +154,6 @@ pub fn parseBool(value: []const u8) ?bool {
 
     return null;
 }
-
-// ============================================================================
-// Suggestion System (Levenshtein Distance)
-// ============================================================================
 
 /// Calculate edit distance between two strings.
 /// Optimized with early termination for common cases.
@@ -227,10 +203,6 @@ pub fn findClosest(needle: []const u8, candidates: []const []const u8, max_dista
     return if (best_distance <= max_distance) best_match else null;
 }
 
-// ============================================================================
-// Validation Helpers
-// ============================================================================
-
 /// Check if value is in choices array.
 pub fn inChoices(value: []const u8, choices: []const []const u8) bool {
     for (choices) |choice| {
@@ -246,9 +218,60 @@ pub inline fn inRange(comptime T: type, value: T, min: ?T, max: ?T) bool {
     return true;
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
+/// Check if string contains substring.
+pub inline fn contains(haystack: []const u8, needle: []const u8) bool {
+    return indexOfStr(haystack, needle) != null;
+}
+
+/// Wrap text to specified width.
+/// Returns a list of lines allocated with the allocator.
+pub fn wrapText(allocator: std.mem.Allocator, text: []const u8, max_width: usize, initial_indent: usize, subsequent_indent: usize) !std.ArrayList([]const u8) {
+    var lines = std.ArrayList([]const u8).init(allocator);
+    errdefer {
+        for (lines.items) |line| allocator.free(line);
+        lines.deinit();
+    }
+
+    var iter = std.mem.splitScalar(u8, text, ' ');
+    var current_line = std.ArrayList(u8).init(allocator);
+    defer current_line.deinit();
+
+    // Add initial indentation
+    try current_line.appendNTimes(' ', initial_indent);
+
+    var first_word = true;
+    var current_width = initial_indent;
+
+    while (iter.next()) |word| {
+        if (word.len == 0) continue;
+
+        if (first_word) {
+            try current_line.appendSlice(word);
+            current_width += word.len;
+            first_word = false;
+        } else {
+            if (current_width + 1 + word.len > max_width) {
+                // Push current line
+                try lines.append(try current_line.toOwnedSlice());
+
+                // Start new line
+                try current_line.appendNTimes(' ', subsequent_indent);
+                try current_line.appendSlice(word);
+                current_width = subsequent_indent + word.len;
+            } else {
+                try current_line.append(' ');
+                try current_line.appendSlice(word);
+                current_width += 1 + word.len;
+            }
+        }
+    }
+
+    if (current_line.items.len > 0) {
+        try lines.append(try current_line.toOwnedSlice());
+    }
+
+    return lines;
+}
 
 test "eql" {
     try std.testing.expect(eql("hello", "hello"));
