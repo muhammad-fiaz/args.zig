@@ -91,7 +91,7 @@ pub fn main() !void {
 Install the latest stable release (v0.0.2):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/v0.0.2.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.2.tar.gz
 ```
 
 ### Nightly Installation

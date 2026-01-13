@@ -13,12 +13,14 @@ pub const Shell = enum {
     zsh,
     fish,
     powershell,
+    nushell,
 
     pub fn fromString(s: []const u8) ?Shell {
         if (utils.eql(s, "bash")) return .bash;
         if (utils.eql(s, "zsh")) return .zsh;
         if (utils.eql(s, "fish")) return .fish;
         if (utils.eql(s, "powershell") or utils.eql(s, "pwsh")) return .powershell;
+        if (utils.eql(s, "nushell") or utils.eql(s, "nu")) return .nushell;
         return null;
     }
 };
@@ -30,6 +32,7 @@ pub fn generateCompletion(allocator: std.mem.Allocator, spec: CommandSpec, shell
         .zsh => generateZshCompletion(allocator, spec),
         .fish => generateFishCompletion(allocator, spec),
         .powershell => generatePowershellCompletion(allocator, spec),
+        .nushell => generateNushellCompletion(allocator, spec),
     };
 }
 
@@ -148,11 +151,54 @@ fn generatePowershellCompletion(allocator: std.mem.Allocator, spec: CommandSpec)
     return result.toOwnedSlice(allocator);
 }
 
+fn generateNushellCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer result.deinit(allocator);
+    const writer = result.writer(allocator);
+
+    try writer.print("# Nushell completion for {s}\n\n", .{spec.name});
+    try writer.print("extern \"{s}\" [\n", .{spec.name});
+
+    for (spec.args) |arg| {
+        if (arg.hidden or arg.positional) continue;
+
+        try writer.writeAll("    ");
+        if (arg.long) |l| {
+            try writer.print("--{s}", .{l});
+            if (arg.short) |s| try writer.print("(-{c})", .{s});
+        } else if (arg.short) |s| {
+            try writer.print("-{c}", .{s});
+        }
+
+        if (arg.value_type != .bool and arg.value_type != .counter) {
+            const type_str = switch (arg.value_type) {
+                .int, .uint, .counter => "int",
+                .float => "number",
+                .path => "path",
+                else => "string",
+            };
+            try writer.print(": {s}", .{type_str});
+        }
+
+        if (arg.help) |h| try writer.print(" # {s}", .{h});
+        try writer.writeAll("\n");
+    }
+
+    try writer.writeAll("    --help(-h) # Print help\n");
+    if (spec.version != null) try writer.writeAll("    --version(-V) # Print version\n");
+
+    try writer.writeAll("]\n");
+
+    return result.toOwnedSlice(allocator);
+}
+
 test "Shell.fromString" {
     try std.testing.expectEqual(Shell.bash, Shell.fromString("bash").?);
     try std.testing.expectEqual(Shell.zsh, Shell.fromString("zsh").?);
     try std.testing.expectEqual(Shell.fish, Shell.fromString("fish").?);
     try std.testing.expectEqual(Shell.powershell, Shell.fromString("powershell").?);
+    try std.testing.expectEqual(Shell.nushell, Shell.fromString("nushell").?);
+    try std.testing.expectEqual(Shell.nushell, Shell.fromString("nu").?);
     try std.testing.expectEqual(@as(?Shell, null), Shell.fromString("unknown"));
 }
 

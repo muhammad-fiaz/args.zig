@@ -131,7 +131,7 @@ pub fn main() !void {
                 .name = "shell",
                 .positional = true,
                 .required = true,
-                .help = "Shell type (bash, zsh, fish, powershell)",
+                .help = "Shell type (bash, zsh, fish, powershell, nushell)",
             },
         },
     });
@@ -186,7 +186,7 @@ pub fn main() !void {
             // Generate completion script
             const shell = args.Shell.fromString(shell_name) orelse {
                 std.debug.print("Unknown shell: {s}\n", .{shell_name});
-                std.debug.print("Supported: bash, zsh, fish, powershell\n", .{});
+                std.debug.print("Supported: bash, zsh, fish, powershell, nushell\n", .{});
                 return;
             };
 

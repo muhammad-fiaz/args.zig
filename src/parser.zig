@@ -197,6 +197,23 @@ pub const Parser = struct {
                 if (self.cfg.exit_on_error) std.process.exit(0);
                 return;
             }
+
+            if (self.cfg.exit_on_error) {
+                const prefix = if (is_short) "-" else "--";
+                std.debug.print("Error: Unknown option '{s}{s}'\n", .{ prefix, name });
+
+                if (!is_short) {
+                    var candidates: std.ArrayListUnmanaged([]const u8) = .empty;
+                    defer candidates.deinit(self.allocator);
+                    var it = self.long_map.keyIterator();
+                    while (it.next()) |k| try candidates.append(self.allocator, k.*);
+
+                    if (utils.findClosest(name, candidates.items, 3)) |sug| {
+                        std.debug.print("\n\tDid you mean '--{s}'?\n", .{sug});
+                    }
+                }
+                std.process.exit(1);
+            }
             return errors.ParseError.UnknownOption;
         }
 
@@ -254,7 +271,25 @@ pub const Parser = struct {
         const arg_spec = self.long_map.get(name) orelse
             if (name.len == 1) self.short_map.get(name[0]) else null;
 
-        if (arg_spec == null) return errors.ParseError.UnknownOption;
+        if (arg_spec == null) {
+            if (self.cfg.exit_on_error) {
+                const prefix = if (name.len == 1) "-" else "--";
+                std.debug.print("Error: Unknown option '{s}{s}'\n", .{ prefix, name });
+
+                if (name.len > 1) {
+                    var candidates: std.ArrayListUnmanaged([]const u8) = .empty;
+                    defer candidates.deinit(self.allocator);
+                    var it = self.long_map.keyIterator();
+                    while (it.next()) |k| try candidates.append(self.allocator, k.*);
+
+                    if (utils.findClosest(name, candidates.items, 3)) |sug| {
+                        std.debug.print("\n\tDid you mean '--{s}'?\n", .{sug});
+                    }
+                }
+                std.process.exit(1);
+            }
+            return errors.ParseError.UnknownOption;
+        }
 
         const spec = arg_spec.?;
         const dest = spec.getDestination();

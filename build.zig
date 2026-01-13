@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
     const examples = [_]struct { name: []const u8, path: []const u8, skip_run_all: bool = false }{
         .{ .name = "basic", .path = "examples/basic.zig" },
         .{ .name = "advanced", .path = "examples/advanced.zig" },
+        .{ .name = "custom_parsing", .path = "examples/custom_parsing.zig" },
         .{ .name = "update_check", .path = "examples/update_check.zig", .skip_run_all = true },
     };
 

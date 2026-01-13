@@ -9,7 +9,7 @@ head:
 
 # Shell Completions
 
-args.zig can generate shell completion scripts for Bash, Zsh, Fish, and PowerShell.
+args.zig can generate shell completion scripts for Bash, Zsh, Fish, Nushell, and PowerShell.
 
 ## Generating Completions
 
@@ -27,6 +27,7 @@ std.debug.print("{s}", .{script});
 | Zsh | `.zsh` | Default on macOS |
 | Fish | `.fish` | User-friendly shell |
 | PowerShell | `.powershell` | Windows and cross-platform |
+| Nushell | `.nushell` | Modern, structured shell |
 
 ## Adding Completion Subcommand
 
@@ -57,7 +58,7 @@ if (result.subcommand) |cmd| {
             try stdout.writeAll(script);
         } else {
             std.debug.print("Unknown shell: {s}\n", .{shell_name});
-            std.debug.print("Supported: bash, zsh, fish, powershell\n", .{});
+            std.debug.print("Supported: bash, zsh, fish, powershell, nushell\n", .{});
         }
     }
 }
@@ -98,6 +99,16 @@ myapp completion fish > ~/.config/fish/completions/myapp.fish
 ```powershell
 # Generate and add to profile
 myapp completion powershell >> $PROFILE
+```
+
+### Nushell
+
+```nu
+# Generate and save to a file
+myapp completion nushell | save completions.nu
+
+# Use in your config.nu or interactively
+source completions.nu
 ```
 
 ## Generated Script Examples

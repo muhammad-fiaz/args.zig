@@ -36,20 +36,20 @@ A production-grade, high-performance command-line argument parsing library for Z
 - [**Fast & Zero Allocations**](https://muhammad-fiaz.github.io/args.zig/guide/efficiency) - Minimal memory footprint with efficient parsing
 - [**Intuitive API**](https://muhammad-fiaz.github.io/args.zig/guide/getting-started) - Python argparse-inspired fluent interface
 - [**Auto-Generated Help**](https://muhammad-fiaz.github.io/args.zig/guide/getting-started) - Formatted help text for better understanding out of the box
-- [**Shell Completions**](https://muhammad-fiaz.github.io/args.zig/guide/shell-completions) - Generate completions for Bash, Zsh, Fish, PowerShell
+- [**Shell Completions**](https://muhammad-fiaz.github.io/args.zig/guide/shell-completions) - Generate completions for Bash, Zsh, Fish, PowerShell, Nushell
 - [**Environment Variables**](https://muhammad-fiaz.github.io/args.zig/guide/environment-variables) - Fallback to env vars for configuration
 - [**Subcommands**](https://muhammad-fiaz.github.io/args.zig/guide/subcommands) - Full support for Git-style subcommands
-- **Colored Output** - ANSI color support for beautiful terminal output
+- [**Colored Output**](https://muhammad-fiaz.github.io/args.zig/guide/configuration#display-options) - ANSI color support for beautiful terminal output
 - [**Update Checker**](https://muhammad-fiaz.github.io/args.zig/guide/updates) - Automatic non-blocking update notifications (enabled by default)
-- [**Comprehensive Validation**](https://muhammad-fiaz.github.io/args.zig/guide/validation) - Type checking, choices, and custom validators
+- [**Comprehensive Validation**](https://muhammad-fiaz.github.io/args.zig/guide/validation) - Type checking, choices, and custom validators for complex parsing
 - [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage across all modules
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.1):
+Install the latest stable release (v0.0.2):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/v0.0.2.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.2.tar.gz
 ```
 
 ### Nightly Installation
@@ -183,7 +183,7 @@ try parser.addSubcommand(.{
 const bash_script = try parser.generateCompletion(.bash);
 std.debug.print("{s}", .{bash_script});
 
-// Also supports: .zsh, .fish, .powershell
+// Also supports: .zsh, .fish, .powershell, .nushell
 ```
 
 ### Environment Variable Fallback
@@ -234,6 +234,14 @@ fn validateUser(val: []const u8) args.validation.ValidationResult {
 try parser.addOption("user", .{
     .help = "Username",
     .validator = validateUser,
+});
+
+// See examples/custom_parsing.zig for complex format validation
+// e.g. --mode 1920x1080@60Hz
+try parser.addOption("mode", .{
+    .help = "Display mode",
+    .validator = validateMode,
+    .metavar = "<W>x<H>[@<R>Hz]",
 });
 ```
 
@@ -306,7 +314,9 @@ Typical results on modern hardware (10,000 iterations):
 | Help Text Generation            | ~50 μs    | ~19,900 ops/sec  |
 | Shell Completion (Bash)         | ~23 μs    | ~42,600 ops/sec  |
 
-*Results vary based on hardware and system load. Tested on Windows x86_64 with Zig 0.15.1.*
+> [!NOTE]
+> Results vary based on hardware and system load. Tested on Windows x86_64 with Zig 0.15.1.
+> If you want the latest release benchmarks, you can find them on the repository [releases](https://github.com/muhammad-fiaz/args.zig/releases).
 
 ## Documentation
 

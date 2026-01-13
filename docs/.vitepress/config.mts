@@ -235,7 +235,9 @@ gtag('config', '${GA_ID}');`,
         {
           text: "Getting Started",
           items: [
-            { text: "Introduction", link: "/guide/getting-started" },
+            { text: "Introduction", link: "/guide/introduction" },
+            { text: "Installation", link: "/guide/installation" },
+            { text: "Quick Start", link: "/guide/getting-started" },
             { text: "Options & Flags", link: "/guide/options-flags" },
             { text: "Subcommands", link: "/guide/subcommands" },
           ],

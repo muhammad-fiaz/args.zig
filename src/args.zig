@@ -75,7 +75,7 @@ pub const ArgumentParser = struct {
 
         var update_thread: ?std.Thread = null;
         if (cfg.check_for_updates and !builtin.is_test) {
-            update_thread = update_checker.checkForUpdates(allocator, cfg.show_update_notification);
+            update_thread = update_checker.checkForUpdates(allocator, cfg.show_update_notification, cfg.use_colors);
         }
 
         return .{

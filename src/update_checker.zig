@@ -8,14 +8,15 @@ const GITHUB_REPO = "muhammad-fiaz/args.zig";
 const CURRENT_VERSION = @import("version.zig").version;
 
 /// Check for updates in a background thread.
-pub fn checkForUpdates(allocator: std.mem.Allocator, show_notification: bool) ?std.Thread {
+pub fn checkForUpdates(allocator: std.mem.Allocator, show_notification: bool, use_colors: bool) ?std.Thread {
     if (!show_notification) return null;
 
-    return std.Thread.spawn(.{}, updateCheckThread, .{ allocator, show_notification }) catch null;
+    return std.Thread.spawn(.{}, updateCheckThread, .{ allocator, show_notification, use_colors }) catch null;
 }
 
-fn updateCheckThread(allocator: std.mem.Allocator, show_notification: bool) void {
+fn updateCheckThread(allocator: std.mem.Allocator, show_notification: bool, use_colors: bool) void {
     _ = allocator;
+    _ = use_colors;
     if (!show_notification) return;
     // Non-blocking check - silently fails if network unavailable
 }
@@ -64,20 +65,19 @@ fn parseVersion(ver: []const u8, major: *u32, minor: *u32, patch: *u32) void {
 }
 
 /// Print update notification to stderr.
-pub fn printUpdateNotification(current: []const u8, latest: []const u8, url: []const u8) void {
-    const yellow = utils.Color.yellow;
-    const green = utils.Color.green;
-    const cyan = utils.Color.cyan;
-    const reset = utils.Color.reset;
-    const bold = utils.Color.bold;
+pub fn printUpdateNotification(current: []const u8, latest: []const u8, url: []const u8, use_colors: bool) void {
+    const yellow = utils.Color.get(utils.Color.yellow, use_colors);
+    const green = utils.Color.get(utils.Color.green, use_colors);
+    const cyan = utils.Color.get(utils.Color.cyan, use_colors);
+    const reset = utils.Color.get(utils.Color.reset, use_colors);
+    const bold = utils.Color.get(utils.Color.bold, use_colors);
 
-    const stderr = std.io.getStdErr().writer();
-    stderr.print("\n", .{}) catch {};
-    stderr.print("{s}╭─────────────────────────────────────────────────────────╮{s}\n", .{ yellow, reset }) catch {};
-    stderr.print("{s}│{s}  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n", .{ yellow, reset, bold, reset, cyan, current, reset, green, latest, reset, yellow, reset }) catch {};
-    stderr.print("{s}│{s}  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n", .{ yellow, reset, cyan, url, reset, yellow, reset }) catch {};
-    stderr.print("{s}╰─────────────────────────────────────────────────────────╯{s}\n", .{ yellow, reset }) catch {};
-    stderr.print("\n", .{}) catch {};
+    std.debug.print("\n", .{});
+    std.debug.print("{s}╭─────────────────────────────────────────────────────────╮{s}\n", .{ yellow, reset });
+    std.debug.print("{s}│{s}  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n", .{ yellow, reset, bold, reset, cyan, current, reset, green, latest, reset, yellow, reset });
+    std.debug.print("{s}│{s}  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n", .{ yellow, reset, cyan, url, reset, yellow, reset });
+    std.debug.print("{s}╰─────────────────────────────────────────────────────────╯{s}\n", .{ yellow, reset });
+    std.debug.print("\n", .{});
 }
 
 /// Get the current library version.
