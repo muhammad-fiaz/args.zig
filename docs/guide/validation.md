@@ -23,6 +23,22 @@ try parser.addOption("output-format", .{
 
 If the user provides a value not in the list, parsing fails.
 
+### Soft Validation (Expect)
+If you want to suggest expected values but not strictly enforce them (depending on configuration), use `.expect`.
+
+```zig
+try parser.addOption("env", .{
+    .short = 'e',
+    .expect = &[_][]const u8{ "dev", "prod" },
+    .help = "Environment",
+});
+```
+
+Behavior depends on `Config`:
+- **Strict Mode**: behaves like `choices` (errors on mismatch).
+- **Permissive Mode** (default): prints a warning if value is not in `expect` list, but accepts it.
+
+
 ## Custom Validators
 
 For more complex validation logic, you can provide a custom validator function. A validator function takes the string value and returns a `ValidationResult`.

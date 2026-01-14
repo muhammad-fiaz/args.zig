@@ -26,6 +26,11 @@ pub const ParseError = error{
 
 /// Errors that occur during schema definition.
 pub const SchemaError = error{
+    DuplicateArgument,
+    InvalidShortName,
+    InvalidLongName,
+    MissingName,
+    EmptyName,
     DuplicateName,
     DuplicateAlias,
     InvalidConfig,

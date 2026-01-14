@@ -23,7 +23,7 @@ This guide will help you get started with args.zig in your Zig project.
 Install the latest stable release (v0.0.2):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.2.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
 ```
 
 ### Nightly Installation
@@ -176,6 +176,7 @@ See [Update Checker Configuration](/guide/updates) for more details.
 ## Next Steps
 
 - Learn about [Options and Flags](/guide/options-flags)
+- Try [Declarative Structs](/guide/declarative-structs) for rapid prototyping
 - Explore [Subcommands](/guide/subcommands)
 - Configure [Environment Variables](/guide/environment-variables)
 - Check the [API Reference](/api/parser)

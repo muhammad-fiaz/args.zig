@@ -280,8 +280,102 @@ logger -v                   # Verbosity: 1
 logger -vv                  # Verbosity: 2
 logger -vvv -l debug        # Verbosity: 3, level: debug
 logger --level error        # level: error
+logger --level error        # level: error
 logger -f json              # format: json
 ```
+
+## Soft Validation (Expect) Example
+
+Using `.expect` to warn on unexpected values instead of erroring:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "expect-demo",
+        .description = "Demonstrates 'expect' validation",
+    });
+    defer parser.deinit();
+
+    // 'expect' suggests values. Warns on mismatch by default.
+    try parser.addOption("env", .{
+        .short = 'e',
+        .expect = &[_][]const u8{ "dev", "prod", "staging" },
+        .help = "Target environment (expected: dev, prod, staging)",
+    });
+
+    try parser.addOption("output", .{
+        .short = 'o',
+        .choices = &[_][]const u8{ "json", "text" }, // Strict validation
+        .help = "Output format (strict: json, text)",
+    });
+
+    var result = try parser.parseProcess();
+    defer result.deinit();
+
+    const env = result.getString("env") orelse "default";
+    const output = result.getString("output") orelse "text";
+
+    std.debug.print("Environment: {s}\n", .{env});
+    std.debug.print("Output:      {s}\n", .{output});
+}
+```
+
+**Usage:**
+```bash
+# Valid input
+expect-demo -e dev -o json
+
+# Invalid 'expect' value (Warnings)
+expect-demo -e unknown
+# Output:
+# Warning: Value 'unknown' is not in expected list for argument 'env'...
+# Environment: unknown
+```
+
+## Declarative Structs Example
+
+Parsing arguments directly into a Zig struct:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+const Config = struct {
+    verbose: bool,
+    dry_run: bool,
+    output: ?[]const u8,
+    count: i32,
+};
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var parsed = try args.parseInto(allocator, Config, .{
+        .name = "struct-demo",
+    }, null);
+    defer parsed.deinit();
+
+    const cfg = parsed.options;
+
+    std.debug.print("Verbose: {}\n", .{cfg.verbose});
+    std.debug.print("Count:   {d}\n", .{cfg.count});
+}
+```
+
+**Usage:**
+```bash
+struct-demo --count 10 --verbose
+```
+
 
 ## Shell Completions Example
 

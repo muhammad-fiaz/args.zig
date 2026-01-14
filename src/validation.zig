@@ -18,6 +18,15 @@ pub fn parseValue(value: []const u8, value_type: ValueType, allocator: std.mem.A
         .bool => .{ .boolean = utils.parseBool(value) orelse return error.InvalidValue },
         .counter => .{ .counter = std.fmt.parseInt(u32, value, 10) catch return error.InvalidValue },
         .array, .custom => .{ .string = value },
+        .key_value => blk: {
+            if (std.mem.indexOfScalar(u8, value, '=')) |idx| {
+                const k = value[0..idx];
+                const v = value[idx + 1 ..];
+                break :blk .{ .key_value = .{ .key = k, .value = v } };
+            } else {
+                return error.InvalidValue; // Expected key=value
+            }
+        },
     };
 }
 

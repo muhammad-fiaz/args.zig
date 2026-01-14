@@ -1,5 +1,5 @@
-//! args.zig - Command-line argument parsing library for Zig.
-//! Fast, powerful, and developer-friendly with Python argparse-inspired API.
+//! Argument parsing library for Zig.
+//! Provides a fluent API for defining and parsing command-line arguments.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -43,7 +43,7 @@ pub const VERSION_MINOR = version_info.version_minor;
 pub const VERSION_PATCH = version_info.version_patch;
 pub const MINIMUM_ZIG_VERSION = version_info.minimum_zig_version;
 
-/// High-level argument parser with fluent API.
+/// Main argument parser structure providing a fluent API.
 pub const ArgumentParser = struct {
     allocator: std.mem.Allocator,
     name: []const u8,
@@ -69,7 +69,10 @@ pub const ArgumentParser = struct {
         config: ?Config = null,
     };
 
-    /// Initialize a new argument parser.
+    /// Initializes a new argument parser instance.
+    ///
+    /// The parser will use the provided allocator for all dynamic allocations.
+    /// If config is not provided, the default global configuration is used.
     pub fn init(allocator: std.mem.Allocator, options: InitOptions) !ArgumentParser {
         const cfg = options.config orelse config.getConfig();
 
@@ -80,10 +83,10 @@ pub const ArgumentParser = struct {
 
         return .{
             .allocator = allocator,
-            .name = options.name,
-            .version = options.version,
-            .description = options.description,
-            .epilog = options.epilog,
+            .name = if (options.name.len > 0) options.name else (cfg.app_name orelse "app"),
+            .version = options.version orelse cfg.app_version,
+            .description = options.description orelse cfg.app_description,
+            .epilog = options.epilog orelse cfg.app_epilog,
             .args = .empty,
             .groups = .empty,
             .subcommands = .empty,
@@ -94,7 +97,7 @@ pub const ArgumentParser = struct {
         };
     }
 
-    /// Clean up resources.
+    /// Releases all resources allocated by the parser.
     pub fn deinit(self: *ArgumentParser) void {
         self.args.deinit(self.allocator);
         for (self.groups.items) |*g| g.deinit(self.allocator);
@@ -102,16 +105,24 @@ pub const ArgumentParser = struct {
         self.subcommands.deinit(self.allocator);
     }
 
-    /// Add an argument with full specification.
+    /// Adds a fully specified argument to the parser.
     pub fn addArg(self: *ArgumentParser, spec: ArgSpec) !void {
         var s = spec;
         if (self.current_group) |group| {
             s.group = group.name;
         }
+
+        if (self.hasArg(s.name)) return error.DuplicateArgument;
+        if (s.long) |l| {
+            if (self.hasArg(l)) return error.DuplicateArgument;
+        }
+        if (s.short) |sh| {
+            if (self.hasShort(sh)) return error.DuplicateArgument;
+        }
         try self.args.append(self.allocator, s);
     }
 
-    /// Add a boolean flag (--verbose, -v).
+    /// Adds a boolean flag argument (e.g., --verbose, -v).
     pub fn addFlag(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -133,7 +144,7 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add an option that takes a value (--output file.txt).
+    /// Adds an option that expects a value (e.g., --output file.txt).
     pub fn addOption(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -148,6 +159,7 @@ pub const ArgumentParser = struct {
         aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
         validator: ?validation.ValidatorFn = null,
+        expect: []const []const u8 = &.{},
     }) !void {
         try self.addArg(.{
             .name = name,
@@ -165,10 +177,11 @@ pub const ArgumentParser = struct {
             .hidden = options.hidden,
             .deprecated = options.deprecated,
             .validator = options.validator,
+            .expect = options.expect,
         });
     }
 
-    /// Add a positional argument.
+    /// Adds a positional argument.
     pub fn addPositional(self: *ArgumentParser, name: []const u8, options: struct {
         help: ?[]const u8 = null,
         value_type: ValueType = .string,
@@ -189,7 +202,7 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add a counter argument (-v -v -v for verbosity).
+    /// Adds a counter argument (e.g., -v -v -v).
     pub fn addCounter(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -206,12 +219,12 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add a subcommand.
+    /// Registers a subcommand.
     pub fn addSubcommand(self: *ArgumentParser, spec: SubcommandSpec) !void {
         try self.subcommands.append(self.allocator, spec);
     }
 
-    /// Build the command specification.
+    /// Builds the internal command specification.
     pub fn buildSpec(self: *ArgumentParser) CommandSpec {
         return .{
             .name = self.name,
@@ -226,7 +239,7 @@ pub const ArgumentParser = struct {
         };
     }
 
-    /// Parse provided arguments.
+    /// Parses the provided argument slice.
     pub fn parse(self: *ArgumentParser, args_slice: []const []const u8) !ParseResult {
         const spec = self.buildSpec();
         var p = try parser.Parser.init(self.allocator, spec);
@@ -234,7 +247,7 @@ pub const ArgumentParser = struct {
         return p.parse(args_slice);
     }
 
-    /// Parse arguments from process (std.process.args).
+    /// Parses arguments from the process's command line.
     pub fn parseProcess(self: *ArgumentParser) !ParseResult {
         var args_iter = try std.process.argsWithAllocator(self.allocator);
         defer args_iter.deinit();
@@ -251,37 +264,37 @@ pub const ArgumentParser = struct {
         return self.parse(args_list.items);
     }
 
-    /// Generate help text.
+    /// Generates the help text for the configured arguments.
     pub fn getHelp(self: *ArgumentParser) ![]const u8 {
         const spec = self.buildSpec();
         return help.generateHelp(self.allocator, spec, self.cfg.use_colors);
     }
 
-    /// Print help to stdout.
+    /// Prints the help text to stdout.
     pub fn printHelp(self: *ArgumentParser) !void {
         const help_text = try self.getHelp();
         defer self.allocator.free(help_text);
         std.debug.print("{s}", .{help_text});
     }
 
-    /// Generate shell completion script.
+    /// Generates a shell completion script.
     pub fn generateCompletion(self: *ArgumentParser, shell: Shell) ![]const u8 {
         const spec = self.buildSpec();
         return completion.generateCompletion(self.allocator, spec, shell);
     }
 
-    /// Get usage string.
+    /// Generates the usage string.
     pub fn getUsage(self: *ArgumentParser) ![]const u8 {
         const spec = self.buildSpec();
         return help.generateUsage(self.allocator, spec);
     }
 
-    /// Get parser version.
+    /// Returns the parser version.
     pub fn getVersion(self: *ArgumentParser) []const u8 {
         return self.version orelse VERSION;
     }
 
-    /// Add an option that appends values to an array.
+    /// Adds an option that appends values to a list.
     pub fn addAppend(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -302,7 +315,7 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add a multi-value option (accepts multiple values).
+    /// Adds a multi-value option (accepts multiple values).
     pub fn addMultiple(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -329,9 +342,8 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Set the argument group for subsequent arguments.
-    /// Set the argument group for subsequent arguments.
-    /// If group_name is null, resets to default (no group).
+    /// Sets the current argument group for subsequent arguments.
+    /// If group_name is null, resets to the default (no group).
     pub fn setGroup(self: *ArgumentParser, group_name: ?[]const u8) void {
         if (group_name) |name| {
             for (self.groups.items) |*g| {
@@ -347,7 +359,7 @@ pub const ArgumentParser = struct {
         }
     }
 
-    /// Add a new argument group and set it as current.
+    /// Creates a new argument group and sets it as active.
     pub fn addArgumentGroup(self: *ArgumentParser, name: []const u8, options: struct {
         description: ?[]const u8 = null,
         exclusive: bool = false,
@@ -362,7 +374,7 @@ pub const ArgumentParser = struct {
         self.current_group = &self.groups.items[self.groups.items.len - 1];
     }
 
-    /// Add an option with environment variable fallback and programmatic default.
+    /// Adds an option with an environment variable fallback and default value.
     pub fn fromEnvOrDefault(
         self: *ArgumentParser,
         name: []const u8,
@@ -387,33 +399,46 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Print version to stdout.
+    /// Prints the version to stdout.
     pub fn printVersion(self: *ArgumentParser) void {
         std.debug.print("{s} {s}\n", .{ self.name, self.getVersion() });
     }
 
-    /// Check if an argument with the given name exists.
+    /// Checks if a short flag exists.
+    pub fn hasShort(self: *ArgumentParser, short: u8) bool {
+        for (self.args.items) |arg| {
+            if (arg.short) |s| {
+                if (s == short) return true;
+            }
+        }
+        return false;
+    }
+
+    /// Checks if an argument with the specified name exists.
     pub fn hasArg(self: *ArgumentParser, name: []const u8) bool {
         for (self.args.items) |arg| {
             if (utils.eql(arg.name, name)) return true;
             if (arg.long) |long| {
                 if (utils.eql(long, name)) return true;
             }
+            for (arg.aliases) |alias| {
+                if (utils.eql(alias, name)) return true;
+            }
         }
         return false;
     }
 
-    /// Get the number of defined arguments.
+    /// Returns the number of defined arguments.
     pub fn argCount(self: *ArgumentParser) usize {
         return self.args.items.len;
     }
 
-    /// Get the number of defined subcommands.
+    /// Returns the number of defined subcommands.
     pub fn subcommandCount(self: *ArgumentParser) usize {
         return self.subcommands.items.len;
     }
 
-    /// Add a required option (shorthand for addOption with required=true).
+    /// Adds a required option.
     pub fn addRequired(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -431,7 +456,7 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add a hidden flag (won't appear in help).
+    /// Adds a hidden flag (excluded from help text).
     pub fn addHiddenFlag(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
         dest: ?[]const u8 = null,
@@ -446,7 +471,7 @@ pub const ArgumentParser = struct {
         });
     }
 
-    /// Add a deprecated option with warning message.
+    /// Adds a deprecated option with a warning message.
     pub fn addDeprecated(self: *ArgumentParser, name: []const u8, warning: []const u8, options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
@@ -465,7 +490,7 @@ pub const ArgumentParser = struct {
     }
 };
 
-/// Convenience function for quick parsing with minimal setup.
+/// Convenience function for quick parsing.
 pub fn parse(
     allocator: std.mem.Allocator,
     comptime args_spec: []const ArgSpec,
@@ -478,29 +503,143 @@ pub fn parse(
     return parser.parseArgs(allocator, spec, args_slice);
 }
 
-/// Initialize global configuration.
+/// Parses command-line arguments directly into a struct type.
+///
+/// This function derives argument specifications from the struct fields at compile-time
+/// and maps parsed values back to the struct. Uses global config for app metadata
+/// if not provided in options.
+///
+/// Example:
+/// ```zig
+/// const Config = struct { verbose: bool, output: ?[]const u8 };
+/// var result = try args.parseInto(allocator, Config, .{ .name = "myapp" }, null);
+/// defer result.deinit();
+/// std.debug.print("Verbose: {}\n", .{result.options.verbose});
+/// ```
+pub fn parseInto(
+    allocator: std.mem.Allocator,
+    comptime T: type,
+    options: ArgumentParser.InitOptions,
+    args_slice: ?[]const []const u8,
+) !ParseIntoResult(T) {
+    var arg_parser = try ArgumentParser.init(allocator, options);
+    defer arg_parser.deinit();
+
+    const specs = comptime schema.deriveOptions(T);
+    for (specs) |spec| {
+        try arg_parser.addArg(spec);
+    }
+
+    var result = if (args_slice) |a| try arg_parser.parse(a) else try arg_parser.parseProcess();
+
+    var opts: T = undefined;
+    inline for (@typeInfo(T).@"struct".fields) |field| {
+        const kebab_name = comptime blk: {
+            var buf: [field.name.len]u8 = undefined;
+            for (field.name, 0..) |c, i| {
+                buf[i] = if (c == '_') '-' else c;
+            }
+            const final_buf = buf;
+            break :blk final_buf;
+        };
+
+        const val_opt = result.get(&kebab_name);
+        const FT = field.type;
+
+        if (FT == bool) {
+            @field(opts, field.name) = if (val_opt) |v| (v.asBool() orelse false) else false;
+        } else if (FT == ?bool) {
+            @field(opts, field.name) = if (val_opt) |v| v.asBool() else null;
+        } else if (FT == []const u8) {
+            @field(opts, field.name) = if (val_opt) |v| (v.asString() orelse "") else "";
+        } else if (FT == ?[]const u8) {
+            @field(opts, field.name) = if (val_opt) |v| v.asString() else null;
+        } else if (FT == i32) {
+            @field(opts, field.name) = if (val_opt) |v| @as(i32, @intCast(v.asInt() orelse 0)) else 0;
+        } else if (FT == i64) {
+            @field(opts, field.name) = if (val_opt) |v| (v.asInt() orelse 0) else 0;
+        } else if (FT == ?f64) {
+            @field(opts, field.name) = if (val_opt) |v| v.asFloat() else null;
+        }
+    }
+
+    return .{ .options = opts, .result = result };
+}
+
+/// Result type for `parseInto` function.
+pub fn ParseIntoResult(comptime T: type) type {
+    return struct {
+        options: T,
+        result: ParseResult,
+
+        /// Deinitializes the parse result, freeing associated memory.
+        pub fn deinit(self: *@This()) void {
+            self.result.deinit();
+        }
+    };
+}
+
+/// Initializes the global configuration.
 pub fn initConfig(cfg: Config) void {
     config.initConfig(cfg);
 }
 
-/// Reset global configuration to defaults.
+/// Resets the global configuration to defaults.
 pub fn resetConfig() void {
     config.resetConfig();
 }
 
-/// Disable update checking globally.
+/// Disables global update checking.
 pub fn disableUpdateCheck() void {
     config.setConfigValue("check_for_updates", false);
 }
 
-/// Enable update checking globally.
+/// Enables global update checking.
 pub fn enableUpdateCheck() void {
     config.setConfigValue("check_for_updates", true);
 }
 
-/// Get current library version.
+/// Returns the current library version.
 pub fn getLibraryVersion() []const u8 {
     return VERSION;
+}
+
+/// Alias for `parseInto`. Parses arguments directly into a struct type.
+pub const derive = parseInto;
+
+/// Alias for `initConfig`. Sets global configuration.
+pub const configure = initConfig;
+
+/// Alias for `getLibraryVersion`. Returns library version string.
+pub const version = getLibraryVersion;
+
+/// Derives argument specifications from a struct type (compile-time).
+/// This is a re-export of `schema.deriveOptions` for convenience.
+pub const deriveOptions = schema.deriveOptions;
+
+/// Quick parse from process args with minimal setup.
+/// Convenience function that creates a parser, adds specs, and parses in one call.
+pub fn quickParse(
+    allocator: std.mem.Allocator,
+    comptime specs: []const ArgSpec,
+    name: []const u8,
+) !ParseResult {
+    var p = try ArgumentParser.init(allocator, .{ .name = name, .config = Config.minimal() });
+    defer p.deinit();
+    for (specs) |spec| {
+        try p.addArg(spec);
+    }
+    return p.parseProcess();
+}
+
+/// Creates a parser with common defaults for CLI applications.
+pub fn createParser(allocator: std.mem.Allocator, name: []const u8) !ArgumentParser {
+    return ArgumentParser.init(allocator, .{ .name = name });
+}
+
+/// Creates a minimal parser with no extra features (no colors, no update check).
+pub fn createMinimalParser(allocator: std.mem.Allocator, name: []const u8) !ArgumentParser {
+    return ArgumentParser.init(allocator, .{ .name = name, .config = Config.minimal() });
 }
 
 test "ArgumentParser basic usage" {
@@ -726,7 +865,7 @@ test "disableUpdateCheck and enableUpdateCheck" {
 
 test "getLibraryVersion" {
     const ver = getLibraryVersion();
-    try std.testing.expectEqualStrings("0.0.2", ver);
+    try std.testing.expectEqualStrings("0.0.3", ver);
 }
 
 test "ArgumentParser subcommand" {
@@ -892,4 +1031,119 @@ test {
     _ = @import("help.zig");
     _ = @import("completion.zig");
     _ = @import("config.zig");
+}
+
+test "ArgumentParser expect strict" {
+    const allocator = std.testing.allocator;
+    config.initConfig(.{ .exit_on_error = false, .parsing_mode = .strict, .silent_errors = true });
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "test",
+    });
+    defer ap.deinit();
+
+    try ap.addOption("env", .{
+        .short = 'e',
+        .expect = &[_][]const u8{ "dev", "prod" },
+    });
+
+    // Valid
+    {
+        const args = [_][]const u8{ "-e", "dev" };
+        var result = try ap.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("dev", result.getString("env").?);
+    }
+
+    // Invalid (Strict -> Error)
+    {
+        const args = [_][]const u8{ "-e", "stage" };
+        try std.testing.expectError(errors.ParseError.InvalidValue, ap.parse(&args));
+    }
+}
+
+test "ArgumentParser expect warning" {
+    const allocator = std.testing.allocator;
+    config.initConfig(.{ .exit_on_error = false, .parsing_mode = .permissive, .silent_errors = true });
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "test",
+    });
+    defer ap.deinit();
+
+    try ap.addOption("env", .{
+        .short = 'e',
+        .expect = &[_][]const u8{ "dev", "prod" },
+    });
+
+    // Valid
+    {
+        const args = [_][]const u8{ "-e", "dev" };
+        var result = try ap.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("dev", result.getString("env").?);
+    }
+
+    // Invalid (Permissive (default) -> Warning, but should still parse)
+    {
+        const args = [_][]const u8{ "-e", "stage" };
+        var result = try ap.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("stage", result.getString("env").?);
+    }
+}
+
+test "derive alias for parseInto" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    const TestConfig = struct {
+        verbose: bool,
+        count: i32,
+    };
+
+    const test_args = [_][]const u8{ "--verbose", "--count", "42" };
+    var result = try derive(allocator, TestConfig, .{ .name = "test" }, &test_args);
+    defer result.deinit();
+
+    try std.testing.expect(result.options.verbose);
+    try std.testing.expectEqual(@as(i32, 42), result.options.count);
+}
+
+test "createParser convenience" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try createParser(allocator, "myapp");
+    defer ap.deinit();
+
+    try std.testing.expectEqualStrings("myapp", ap.name);
+}
+
+test "createMinimalParser convenience" {
+    const allocator = std.testing.allocator;
+
+    var ap = try createMinimalParser(allocator, "minimal");
+    defer ap.deinit();
+
+    try std.testing.expectEqualStrings("minimal", ap.name);
+    try std.testing.expect(!ap.cfg.use_colors);
+    try std.testing.expect(!ap.cfg.check_for_updates);
+}
+
+test "version alias" {
+    const ver = version();
+    try std.testing.expectEqualStrings(VERSION, ver);
+}
+
+test "configure alias" {
+    configure(.{ .use_colors = false, .check_for_updates = false });
+    defer resetConfig();
+
+    const cfg = config.getConfig();
+    try std.testing.expect(!cfg.use_colors);
 }

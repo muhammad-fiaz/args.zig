@@ -10,6 +10,66 @@ pub const ArgAction = types.ArgAction;
 pub const Nargs = types.Nargs;
 pub const ParsedValue = types.ParsedValue;
 
+/// Derives specific arguments from a struct type.
+pub fn deriveOptions(comptime T: type) []const ArgSpec {
+    if (@typeInfo(T) != .@"struct") @compileError("deriveOptions requires a struct type, found " ++ @typeName(T));
+
+    const fields = @typeInfo(T).@"struct".fields;
+    comptime var specs: [fields.len]ArgSpec = undefined;
+
+    inline for (fields, 0..) |field, i| {
+        const kebab_name = comptime blk: {
+            var buf: [field.name.len]u8 = undefined;
+            for (field.name, 0..) |c, j| {
+                buf[j] = if (c == '_') '-' else c;
+            }
+            const final_buf = buf;
+            break :blk final_buf;
+        };
+        const name_slice = &kebab_name;
+
+        inline for (0..i) |prev_idx| {
+            if (std.mem.eql(u8, specs[prev_idx].name, name_slice)) {
+                @compileError("Duplicate argument name derived from struct: " ++ name_slice);
+            }
+        }
+
+        const FieldType = field.type;
+        const value_type: ValueType = if (FieldType == bool or FieldType == ?bool)
+            .bool
+        else if (FieldType == []const u8 or FieldType == ?[]const u8)
+            .string
+        else if (FieldType == i32 or FieldType == ?i32 or FieldType == i64 or FieldType == ?i64)
+            .int
+        else if (FieldType == u32 or FieldType == ?u32 or FieldType == u64 or FieldType == ?u64 or FieldType == usize or FieldType == ?usize)
+            .uint
+        else if (FieldType == f32 or FieldType == ?f32 or FieldType == f64 or FieldType == ?f64)
+            .float
+        else
+            .string;
+
+        const action: ArgAction = if (value_type == .bool) .store_true else .store;
+        const is_optional = @typeInfo(FieldType) == .optional;
+
+        specs[i] = .{
+            .name = name_slice,
+            .long = name_slice,
+            .value_type = value_type,
+            .action = action,
+            .required = !is_optional and action != .store_true,
+        };
+    }
+
+    const final_specs = specs;
+    return &final_specs;
+}
+
+/// Callback function type.
+/// Triggered when the argument is encountered.
+/// - name: The argument name or destination.
+/// - value: The provided value, or null if it's a flag.
+pub const CallbackFn = *const fn (name: []const u8, value: ?[]const u8) void;
+
 /// Specification for a single argument.
 pub const ArgSpec = struct {
     name: []const u8,
@@ -31,6 +91,8 @@ pub const ArgSpec = struct {
     group: ?[]const u8 = null,
     deprecated: ?[]const u8 = null,
     validator: ?validation.ValidatorFn = null,
+    callback: ?CallbackFn = null,
+    expect: []const []const u8 = &.{}, // Add expect field for allowed values validation
 
     /// Get the destination name for storing the value.
     pub fn getDestination(self: *const ArgSpec) []const u8 {
@@ -56,6 +118,11 @@ pub const ArgSpec = struct {
     /// Check if this argument has choices.
     pub fn hasChoices(self: *const ArgSpec) bool {
         return self.choices.len > 0;
+    }
+
+    /// Check if this argument has expected values.
+    pub fn hasExpect(self: *const ArgSpec) bool {
+        return self.expect.len > 0;
     }
 };
 

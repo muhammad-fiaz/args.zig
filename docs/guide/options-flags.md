@@ -34,6 +34,54 @@ myapp --verbose    # verbose = true
 myapp -vq          # verbose = true, quiet = true (clustered)
 ```
 
+## Aliases
+
+You can provide multiple names for the same option using aliases:
+
+```zig
+try parser.addArg(.{
+    .name = "verbose",
+    .long = "verbose",
+    .aliases = &[_][]const u8{ "loud", "debug" },
+    .action = .store_true,
+    .help = "Verbose output",
+});
+```
+
+Usage:
+```bash
+myapp --verbose
+myapp --loud       # Same as --verbose
+myapp --debug      # Same as --verbose
+```
+
+myapp -vq          # verbose = true, quiet = true (clustered)
+```
+
+## Key-Value Pairs
+
+You can automatically parse `key=value` strings:
+
+```zig
+try parser.addOption("define", .{
+    .short = 'D',
+    .value_type = .key_value,
+    .help = "Define a property",
+});
+```
+
+Usage:
+```bash
+myapp -D mode=release
+```
+
+Access:
+```zig
+if (result.getKeyValue("define")) |kv| {
+    // kv.key = "mode", kv.value = "release"
+}
+```
+
 ## Options (Value-Taking Arguments)
 
 Options accept a value:
@@ -151,6 +199,19 @@ try parser.addOption("format", .{
     .choices = &[_][]const u8{ "json", "xml", "csv", "yaml" },
 });
 ```
+
+## Expected Values
+
+Suggest values without strict enforcement (warns by default, configurable):
+
+```zig
+try parser.addOption("env", .{
+    .short = 'e',
+    .expect = &[_][]const u8{ "dev", "prod", "staging" },
+    .help = "Environment (warns if unknown)",
+});
+```
+
 
 ## Multiple Values
 

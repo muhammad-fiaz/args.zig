@@ -1,4 +1,5 @@
-//! Main argument parser for args.zig.
+//! Core parsing logic for args.zig.
+//! Handles tokenization, validation, and value mapping.
 
 const std = @import("std");
 const types = @import("types.zig");
@@ -19,7 +20,7 @@ pub const Token = tokenizer_mod.Token;
 pub const TokenType = tokenizer_mod.TokenType;
 pub const Config = config_mod.Config;
 
-/// Main argument parser.
+/// Internal parser structure that handles the parsing state.
 pub const Parser = struct {
     allocator: std.mem.Allocator,
     spec: CommandSpec,
@@ -27,6 +28,7 @@ pub const Parser = struct {
     short_map: std.AutoHashMap(u8, *const ArgSpec),
     long_map: std.StringHashMap(*const ArgSpec),
 
+    /// Initializes a new parser instance with the given specification.
     pub fn init(allocator: std.mem.Allocator, spec: CommandSpec) !Parser {
         var self = Parser{
             .allocator = allocator,
@@ -47,11 +49,13 @@ pub const Parser = struct {
         return self;
     }
 
+    /// Releases allocations used by the parser maps.
     pub fn deinit(self: *Parser) void {
         self.short_map.deinit();
         self.long_map.deinit();
     }
 
+    /// Parses the provided argument list.
     pub fn parse(self: *Parser, args: []const []const u8) !ParseResult {
         var result = ParseResult.init(self.allocator);
         errdefer result.deinit();
@@ -230,6 +234,33 @@ pub const Parser = struct {
                 } else 1;
                 try result.values.put(dest, .{ .counter = count });
             },
+            .callback => {
+                const next = tokenizer.peek();
+                if (next.token_type != .value) return errors.ParseError.MissingValue;
+                _ = tokenizer.next();
+
+                // Validate if needed, but mainly we want to run the callback
+                if (spec.validator) |v| {
+                    const res = v(next.raw);
+                    if (!res.isOk()) {
+                        return errors.ValidationError.CustomValidationFailed;
+                    }
+                }
+
+                if (spec.callback) |cb| {
+                    cb(dest, next.raw);
+                }
+
+                const value = try validation.parseValue(next.raw, spec.value_type, self.allocator);
+                try result.values.put(dest, value);
+            },
+            .callback_flag => {
+                if (spec.callback) |cb| {
+                    cb(dest, null);
+                }
+                // Store as boolean true for the result map
+                try result.values.put(dest, .{ .boolean = true });
+            },
             .store, .append => {
                 const next = tokenizer.peek();
                 if (next.token_type != .value) return errors.ParseError.MissingValue;
@@ -244,6 +275,33 @@ pub const Parser = struct {
                 if (spec.choices.len > 0 and !validation.validateChoice(next.raw, spec.choices)) {
                     return errors.ParseError.InvalidChoice;
                 }
+                if (spec.expect.len > 0) {
+                    if (!validation.validateChoice(next.raw, spec.expect)) {
+                        if (self.cfg.parsing_mode == .strict) {
+                            if (!self.cfg.silent_errors) {
+                                std.debug.print("Error: Value '{s}' is not in expected list for argument '{s}'. Expected one of: ", .{ next.raw, spec.name });
+                                for (spec.expect, 0..) |expected_val, i| {
+                                    std.debug.print("'{s}'", .{expected_val});
+                                    if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                                }
+                                std.debug.print("\n", .{});
+                            }
+                            if (self.cfg.exit_on_error) std.process.exit(1);
+                            return errors.ParseError.InvalidValue;
+                        } else {
+                            // Warning mode
+                            if (!self.cfg.silent_errors) {
+                                std.debug.print("Warning: Value '{s}' is unexpected for argument '{s}'. Expected one of: ", .{ next.raw, spec.name });
+                                for (spec.expect, 0..) |expected_val, i| {
+                                    std.debug.print("'{s}'", .{expected_val});
+                                    if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                                }
+                                std.debug.print("\n", .{});
+                            }
+                        }
+                    }
+                }
+
                 if (spec.action == .append) {
                     try result.positionals.append(self.allocator, next.raw);
                 } else {
@@ -306,6 +364,32 @@ pub const Parser = struct {
             return errors.ParseError.InvalidChoice;
         }
 
+        if (spec.expect.len > 0) {
+            if (!validation.validateChoice(value_str, spec.expect)) {
+                if (self.cfg.parsing_mode == .strict) {
+                    if (!self.cfg.silent_errors) {
+                        std.debug.print("Error: Value '{s}' is not in expected list for argument '{s}'. Expected one of: ", .{ value_str, spec.name });
+                        for (spec.expect, 0..) |expected_val, i| {
+                            std.debug.print("'{s}'", .{expected_val});
+                            if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                        }
+                        std.debug.print("\n", .{});
+                    }
+                    if (self.cfg.exit_on_error) std.process.exit(1);
+                    return errors.ParseError.InvalidValue;
+                } else {
+                    if (!self.cfg.silent_errors) {
+                        std.debug.print("Warning: Value '{s}' is unexpected for argument '{s}'. Expected one of: ", .{ value_str, spec.name });
+                        for (spec.expect, 0..) |expected_val, i| {
+                            std.debug.print("'{s}'", .{expected_val});
+                            if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                        }
+                        std.debug.print("\n", .{});
+                    }
+                }
+            }
+        }
+
         try result.values.put(dest, value);
     }
 
@@ -339,6 +423,7 @@ pub const Parser = struct {
     }
 };
 
+/// Convenience function to parse arguments with a single call.
 pub fn parseArgs(allocator: std.mem.Allocator, spec: CommandSpec, args: []const []const u8) !ParseResult {
     var parser = try Parser.init(allocator, spec);
     defer parser.deinit();

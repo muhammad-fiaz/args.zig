@@ -47,6 +47,9 @@ features:
   - icon: 🔄
     title: Update Checker
     details: Optional non-blocking update checker that notifies users of new versions (can be disabled for air-gapped environments).
+  - icon: 📋
+    title: Declarative Structs
+    details: Parse arguments directly into Zig structs with parseInto/derive for rapid prototyping and type-safe configuration.
 ---
 
 ## Requirements
@@ -88,10 +91,10 @@ pub fn main() !void {
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.2):
+Install the latest stable release (v0.0.3):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.2.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
 ```
 
 ### Nightly Installation
@@ -116,5 +119,5 @@ exe.root_module.addImport("args", args_dep.module("args"));
 
 ## Current Version
 
-- **Package Version:** 0.0.2
-- **Minimum Zig Version:** 0.15.0
+- **Package Version:** 0.0.3
+- **Minimum Zig Version:** 0.15.1

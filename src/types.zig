@@ -14,6 +14,7 @@ pub const ValueType = enum {
     array,
     counter,
     custom,
+    key_value,
 
     /// Get the default value as a string for this type.
     pub fn defaultAsString(self: ValueType) []const u8 {
@@ -28,6 +29,7 @@ pub const ValueType = enum {
             .array => "[]",
             .counter => "0",
             .custom => "",
+            .key_value => "",
         };
     }
 
@@ -44,6 +46,7 @@ pub const ValueType = enum {
             .array => "ARRAY",
             .counter => "N",
             .custom => "VALUE",
+            .key_value => "KEY=VALUE",
         };
     }
 
@@ -66,13 +69,14 @@ pub const ArgAction = enum {
     help,
     version,
     callback,
+    callback_flag,
     extend,
 
     /// Check if this action requires a value.
     pub fn requiresValue(self: ArgAction) bool {
         return switch (self) {
             .store, .append, .extend, .callback => true,
-            .store_true, .store_false, .count, .help, .version => false,
+            .store_true, .store_false, .count, .help, .version, .callback_flag => false,
         };
     }
 
@@ -132,6 +136,12 @@ pub const Nargs = union(enum) {
     }
 };
 
+/// Key-Value pair structure.
+pub const KeyValue = struct {
+    key: []const u8,
+    value: []const u8,
+};
+
 /// Represents a parsed argument value.
 pub const ParsedValue = union(enum) {
     string: []const u8,
@@ -141,6 +151,7 @@ pub const ParsedValue = union(enum) {
     boolean: bool,
     array: []const []const u8,
     counter: u32,
+    key_value: KeyValue,
     none: void,
 
     /// Check if this value is set (not none).
@@ -191,6 +202,14 @@ pub const ParsedValue = union(enum) {
     pub fn asString(self: ParsedValue) ?[]const u8 {
         return switch (self) {
             .string => |s| s,
+            else => null,
+        };
+    }
+
+    /// Try to get as key-value pair.
+    pub fn asKeyValue(self: ParsedValue) ?KeyValue {
+        return switch (self) {
+            .key_value => |kv| kv,
             else => null,
         };
     }
@@ -261,6 +280,12 @@ pub const ParseResult = struct {
     pub fn getFloat(self: *const ParseResult, name: []const u8) ?f64 {
         const val = self.values.get(name) orelse return null;
         return val.asFloat();
+    }
+
+    /// Get a key-value pair by name.
+    pub fn getKeyValue(self: *const ParseResult, name: []const u8) ?KeyValue {
+        const val = self.values.get(name) orelse return null;
+        return val.asKeyValue();
     }
 
     /// Check if a value exists.

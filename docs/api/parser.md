@@ -376,7 +376,109 @@ var result = try parser.parseProcess();
 defer result.deinit();
 ```
 
+### `parseInto` (Module-level Function)
+
+```zig
+pub fn parseInto(
+    allocator: std.mem.Allocator,
+    comptime T: type,
+    options: ArgumentParser.InitOptions,
+    args_slice: ?[]const []const u8,
+) !ParseIntoResult(T)
+```
+
+Parses command-line arguments directly into a struct type. Derives argument specs from struct fields at compile-time.
+
+**Parameters:**
+- `allocator` - Memory allocator
+- `T` - The struct type to parse into
+- `options` - Parser initialization options
+- `args_slice` - Argument slice to parse, or `null` to use process args
+
+**Example:**
+```zig
+const Config = struct {
+    verbose: bool,
+    output: ?[]const u8,
+    count: i32,
+};
+
+var result = try args.parseInto(allocator, Config, .{
+    .name = "myapp",
+}, null);
+defer result.deinit();
+
+std.debug.print("Count: {d}\n", .{result.options.count});
+```
+
+## Function Aliases
+
+For convenience, the library provides several aliases:
+
+| Alias | Original Function | Description |
+|-------|------------------|-------------|
+| `derive` | `parseInto` | Parse args directly into a struct |
+| `configure` | `initConfig` | Set global configuration |
+| `version` | `getLibraryVersion` | Get library version string |
+
+**Example:**
+```zig
+// These are equivalent:
+var parsed = try args.parseInto(allocator, Config, options, null);
+var parsed = try args.derive(allocator, Config, options, null);
+
+// These are equivalent:
+args.initConfig(.{ .use_colors = false });
+args.configure(.{ .use_colors = false });
+```
+
+## Convenience Functions
+
+### `createParser`
+
+```zig
+pub fn createParser(allocator: std.mem.Allocator, name: []const u8) !ArgumentParser
+```
+
+Creates a parser with common defaults.
+
+**Example:**
+```zig
+var parser = try args.createParser(allocator, "myapp");
+defer parser.deinit();
+```
+
+### `createMinimalParser`
+
+```zig
+pub fn createMinimalParser(allocator: std.mem.Allocator, name: []const u8) !ArgumentParser
+```
+
+Creates a minimal parser (no colors, no update check).
+
+**Example:**
+```zig
+var parser = try args.createMinimalParser(allocator, "myapp");
+defer parser.deinit();
+```
+
+### `deriveOptions`
+
+```zig
+pub fn deriveOptions(comptime T: type) []const ArgSpec
+```
+
+Derives argument specifications from a struct type at compile-time. Useful if you need the specs without parsing.
+
+**Example:**
+```zig
+const Config = struct { verbose: bool, count: i32 };
+const specs = args.deriveOptions(Config);
+// specs is []const ArgSpec with 2 entries
+```
+
 ## Help and Completion
+
 
 ### `getHelp`
 

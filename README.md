@@ -39,17 +39,19 @@ A production-grade, high-performance command-line argument parsing library for Z
 - [**Shell Completions**](https://muhammad-fiaz.github.io/args.zig/guide/shell-completions) - Generate completions for Bash, Zsh, Fish, PowerShell, Nushell
 - [**Environment Variables**](https://muhammad-fiaz.github.io/args.zig/guide/environment-variables) - Fallback to env vars for configuration
 - [**Subcommands**](https://muhammad-fiaz.github.io/args.zig/guide/subcommands) - Full support for Git-style subcommands
+- [**Declarative Structs**](https://muhammad-fiaz.github.io/args.zig/guide/declarative-structs) - Parse directly into Zig structs with `parseInto`
 - [**Colored Output**](https://muhammad-fiaz.github.io/args.zig/guide/configuration#display-options) - ANSI color support for beautiful terminal output
 - [**Update Checker**](https://muhammad-fiaz.github.io/args.zig/guide/updates) - Automatic non-blocking update notifications (enabled by default)
 - [**Comprehensive Validation**](https://muhammad-fiaz.github.io/args.zig/guide/validation) - Type checking, choices, and custom validators for complex parsing
 - [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage across all modules
 
+
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.2):
+Install the latest stable release (v0.0.3):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.2.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
 ```
 
 ### Nightly Installation
@@ -243,7 +245,62 @@ try parser.addOption("mode", .{
     .validator = validateMode,
     .metavar = "<W>x<H>[@<R>Hz]",
 });
+
+### Aliases
+
+You can define multiple names (aliases) for a single argument:
+
+```zig
+try parser.addArg(.{
+    .name = "verbose",
+    .long = "verbose",
+    .aliases = &[_][]const u8{ "v", "loud", "debug" },
+    .action = .store_true,
+    .help = "Enable verbose output",
+});
 ```
+
+### Callbacks
+
+Trigger a function immediately when an argument is parsed:
+
+```zig
+fn onOutput(name: []const u8, value: ?[]const u8) void {
+    std.debug.print("Option {s} received value: {s}\n", .{name, value orelse "null"});
+}
+
+// ...
+
+try parser.addArg(.{
+    .name = "output",
+    .long = "output",
+    .action = .callback,
+    .callback = onOutput,
+});
+```
+```
+
+### Declarative Structs
+
+Define your CLI interface using a native Zig struct:
+
+```zig
+const Config = struct {
+    verbose: bool,
+    output: ?[]const u8,
+    count: i32,
+};
+
+// Parse directly into the struct
+var parsed = try args.parseInto(allocator, Config, .{
+    .name = "myapp",
+}, null);
+defer parsed.deinit();
+
+std.debug.print("Count: {d}\n", .{parsed.options.count});
+```
+
+
 
 ## Configuration
 
@@ -306,13 +363,18 @@ Typical results on modern hardware (10,000 iterations):
 | Benchmark                    | Avg Time  | Throughput      |
 |------------------------------|-----------|-----------------|
 | Simple Flags (3 flags)          | ~33 μs    | ~30,000 ops/sec  |
-| Multiple Options (3 options)    | ~32 μs    | ~30,700 ops/sec  |
-| Positional Arguments            | ~24 μs    | ~42,000 ops/sec  |
-| Counters (-vvv -dd)             | ~23 μs    | ~42,700 ops/sec  |
-| Subcommands (2 subcommands)     | ~25 μs    | ~40,400 ops/sec  |
-| Mixed Arguments (complex CLI)   | ~40 μs    | ~24,800 ops/sec  |
-| Help Text Generation            | ~50 μs    | ~19,900 ops/sec  |
-| Shell Completion (Bash)         | ~23 μs    | ~42,600 ops/sec  |
+| Multiple Options (3 options)    | ~34 μs    | ~29,200 ops/sec  |
+| Positional Arguments            | ~24 μs    | ~40,700 ops/sec  |
+| Counters (-vvv -dd)             | ~24 μs    | ~41,800 ops/sec  |
+| Subcommands (2 subcommands)     | ~23 μs    | ~43,500 ops/sec  |
+| Mixed Arguments (complex CLI)   | ~40 μs    | ~24,600 ops/sec  |
+| Argument Groups                 | ~23 μs    | ~42,900 ops/sec  |
+| Callbacks                       | ~23 μs    | ~42,400 ops/sec  |
+| Help Text Generation            | ~46 μs    | ~21,500 ops/sec  |
+| Shell Completion (Bash)         | ~23 μs    | ~43,300 ops/sec  |
+| Declarative Structs             | ~29 μs    | ~34,600 ops/sec  |
+| Expect Validation               | ~18 μs    | ~56,400 ops/sec  |
+
 
 > [!NOTE]
 > Results vary based on hardware and system load. Tested on Windows x86_64 with Zig 0.15.1.

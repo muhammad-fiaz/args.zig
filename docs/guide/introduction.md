@@ -24,12 +24,14 @@ Building a CLI tool should be straightforward. You shouldn't have to fight with 
 
 - **🚀 Lightning Fast**: Built with efficiency in mind.
 - **🎯 Intuitive and Fluent API**: Readable code that clearly defines your CLI structure.
+- **📋 Declarative Structs**: Parse directly into Zig structs with `parseInto` for rapid prototyping.
 - **🔄 Subcommands**: Infinite nesting of commands (e.g., `git remote add ...`).
 - **🔤 Shell Completions**: Generate scripts for Bash, Zsh, Fish, Nushell and PowerShell.
 - **🌍 Environment Variables**: Seamless fallback to specific environment variables.
 - **✨ Auto-Generated Help**: Beautiful, consistent, and colorized help text.
 - **🛡️ Robust Validation**: Type checking, choices, numeric ranges, and custom validation functions.
 - **🔔 Update Checker**: Optional integration to notify users of new releases.
+
 
 ## Design Philosophy
 

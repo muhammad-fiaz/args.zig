@@ -17,14 +17,19 @@ args.zig provides flexible configuration options to customize parser behavior.
 const args = @import("args");
 
 const Config = struct {
+    // Update checking
     check_for_updates: bool = false,
     show_update_notification: bool = true,
+    
+    // Display options
     use_colors: bool = true,
     help_line_width: usize = 80,
     help_indent: usize = 24,
     show_defaults: bool = true,
     show_env_vars: bool = true,
     program_name: ?[]const u8 = null,
+    
+    // Parsing behavior
     exit_on_error: bool = true,
     parsing_mode: ParsingMode = .strict,
     allow_short_clusters: bool = true,
@@ -32,8 +37,18 @@ const Config = struct {
     allow_interspersed: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
+    silent_errors: bool = false, // Suppress error output (for tests)
+    
+    // Global Application Metadata (centralized defaults)
+    app_name: ?[]const u8 = null,
+    app_version: ?[]const u8 = null,
+    app_description: ?[]const u8 = null,
+    app_epilog: ?[]const u8 = null,
+    app_author: ?[]const u8 = null,
 };
 ```
+
+
 
 ## Configuration Options
 
@@ -66,6 +81,17 @@ const Config = struct {
 | `allow_interspersed` | `true` | Allow options after positionals |
 | `case_sensitive` | `true` | Case-sensitive option matching |
 | `env_prefix` | `null` | Prefix for environment variables |
+| `silent_errors` | `false` | Suppress error/warning prints (for tests) |
+
+### Application Metadata (Global Defaults)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `app_name` | `null` | Default application name for all parsers |
+| `app_version` | `null` | Default application version |
+| `app_description` | `null` | Default application description |
+| `app_epilog` | `null` | Default epilog text (shown after help) |
+| `app_author` | `null` | Application author information |
 
 ## Configuration Presets
 
@@ -118,20 +144,38 @@ var parser = try args.ArgumentParser.init(allocator, .{
 
 ## Global Configuration
 
-Set configuration globally before creating parsers:
+Set configuration globally before creating parsers. This is ideal for centralizing application metadata:
 
 ```zig
-// Initialize global config
+// Initialize global config with app metadata
 args.initConfig(.{
-    .use_colors = false,
+    .app_name = "myapp",
+    .app_version = "1.0.0",
+    .app_description = "My amazing application",
+    .app_author = "Your Name",
+    .use_colors = true,
     .check_for_updates = false,
 });
 
-// All parsers will use this config unless overridden
+// Parsers automatically inherit these values
 var parser = try args.ArgumentParser.init(allocator, .{
-    .name = "myapp",
+    .name = "", // Uses app_name from global config
 });
+
+// Or use parseInto which also respects global config
+const Config = struct { verbose: bool };
+var parsed = try args.parseInto(allocator, Config, .{
+    .name = "", // Uses app_name from global config
+}, null);
+
 ```
+
+### Benefits of Global Configuration
+
+- **Centralized metadata**: Define app name, version, description once
+- **Consistent behavior**: All parsers share the same settings
+- **Override when needed**: Per-parser config takes precedence
+
 
 ## Disabling Update Checks
 

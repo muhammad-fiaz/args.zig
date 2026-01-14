@@ -20,6 +20,14 @@ pub const Config = struct {
     allow_interspersed: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
+    silent_errors: bool = false, // Suppress error/warning prints (useful for tests)
+
+    // Global Application Metadata (used if not explicitly provided in init)
+    app_name: ?[]const u8 = null,
+    app_version: ?[]const u8 = null,
+    app_description: ?[]const u8 = null,
+    app_epilog: ?[]const u8 = null,
+    app_author: ?[]const u8 = null,
 
     pub fn default() Config {
         return .{};
@@ -33,6 +41,7 @@ pub const Config = struct {
             .show_defaults = false,
             .show_env_vars = false,
             .exit_on_error = false,
+            .silent_errors = true,
         };
     }
 

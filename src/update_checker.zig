@@ -7,8 +7,13 @@ const utils = @import("utils.zig");
 const GITHUB_REPO = "muhammad-fiaz/args.zig";
 const CURRENT_VERSION = @import("version.zig").version;
 
+var check_performed_once = false;
+
 /// Check for updates in a background thread.
 pub fn checkForUpdates(allocator: std.mem.Allocator, show_notification: bool, use_colors: bool) ?std.Thread {
+    if (check_performed_once) return null;
+    check_performed_once = true;
+
     if (!show_notification) return null;
 
     return std.Thread.spawn(.{}, updateCheckThread, .{ allocator, show_notification, use_colors }) catch null;

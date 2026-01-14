@@ -18,6 +18,10 @@ pub fn build(b: *std.Build) void {
         .{ .name = "basic", .path = "examples/basic.zig" },
         .{ .name = "advanced", .path = "examples/advanced.zig" },
         .{ .name = "custom_parsing", .path = "examples/custom_parsing.zig" },
+        .{ .name = "callbacks", .path = "examples/callbacks.zig" },
+        .{ .name = "key_value", .path = "examples/key_value.zig" },
+        .{ .name = "struct_demo", .path = "examples/struct_demo.zig" },
+        .{ .name = "expect_validation", .path = "examples/expect_validation.zig" },
         .{ .name = "update_check", .path = "examples/update_check.zig", .skip_run_all = true },
     };
 

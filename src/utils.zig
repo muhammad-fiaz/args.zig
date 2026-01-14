@@ -273,6 +273,16 @@ pub fn wrapText(allocator: std.mem.Allocator, text: []const u8, max_width: usize
     return lines;
 }
 
+/// Convert snake_case to kebab-case.
+/// Caller owns the returned string memory.
+pub fn toKebabCase(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
+    const result = try allocator.dupe(u8, s);
+    for (result) |*c| {
+        if (c.* == '_') c.* = '-';
+    }
+    return result;
+}
+
 test "eql" {
     try std.testing.expect(eql("hello", "hello"));
     try std.testing.expect(!eql("hello", "world"));

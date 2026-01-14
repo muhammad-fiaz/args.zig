@@ -61,7 +61,7 @@ fn printResults(results: []const BenchmarkResult) void {
     }
 
     std.debug.print("\n", .{});
-    std.debug.print("=" ** 130, .{});
+    std.debug.print("-" ** 130, .{});
     std.debug.print("\n", .{});
 }
 
@@ -242,6 +242,56 @@ fn benchmarkCompletionGeneration(allocator: std.mem.Allocator) !void {
     parser.deinit();
 }
 
+fn benchmarkCallbacks(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "-v", "-v", "--output", "file.txt" };
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "bench",
+        .config = args.Config.minimal(),
+    });
+
+    try parser.addArg(.{ .name = "verbose", .short = 'v', .action = .callback_flag, .callback = struct {
+        fn cb(_: []const u8, _: ?[]const u8) void {}
+    }.cb });
+
+    try parser.addArg(.{ .name = "output", .long = "output", .action = .callback, .callback = struct {
+        fn cb(_: []const u8, _: ?[]const u8) void {}
+    }.cb });
+
+    var result = try parser.parse(&test_args);
+    result.deinit();
+    parser.deinit();
+}
+
+fn benchmarkExpectValidation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "-e", "prod" };
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "bench",
+        .config = args.Config.minimal(),
+    });
+    try parser.addOption("env", .{
+        .short = 'e',
+        .expect = &[_][]const u8{ "dev", "prod", "stage" },
+    });
+    var result = try parser.parse(&test_args);
+    result.deinit();
+    parser.deinit();
+}
+
+fn benchmarkStructParsing(allocator: std.mem.Allocator) !void {
+    const Config = struct {
+        verbose: bool,
+        output: ?[]const u8,
+        count: i32,
+    };
+    const test_args = [_][]const u8{ "--count", "42", "--verbose", "--output", "file.txt" };
+
+    var parsed = try args.parseInto(allocator, Config, .{
+        .name = "bench",
+        .config = args.Config.minimal(),
+    }, &test_args);
+    parsed.deinit();
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -263,6 +313,9 @@ pub fn main() !void {
     try results.append(allocator, try runBenchmark("Subcommands (2 subcommands)", allocator, benchmarkSubcommands, "Advanced Features"));
     try results.append(allocator, try runBenchmark("Mixed Arguments (complex CLI)", allocator, benchmarkMixedArgs, "Advanced Features"));
     try results.append(allocator, try runBenchmark("Argument Groups", allocator, benchmarkArgumentGroups, "Advanced Features"));
+    try results.append(allocator, try runBenchmark("Callbacks", allocator, benchmarkCallbacks, "Advanced Features"));
+    try results.append(allocator, try runBenchmark("Expect Validation", allocator, benchmarkExpectValidation, "Advanced Features"));
+    try results.append(allocator, try runBenchmark("Declarative Structs", allocator, benchmarkStructParsing, "Advanced Features"));
 
     // Generation
     try results.append(allocator, try runBenchmark("Help Text Generation", allocator, benchmarkHelpGeneration, "Generation"));
