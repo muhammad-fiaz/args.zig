@@ -228,6 +228,7 @@ pub const ParseResult = struct {
     values: std.StringHashMap(ParsedValue),
     positionals: std.ArrayListUnmanaged([]const u8),
     remaining: std.ArrayListUnmanaged([]const u8),
+    owned_slices: std.ArrayListUnmanaged([]const u8),
     subcommand: ?[]const u8,
     subcommand_args: ?*ParseResult,
     allocator: std.mem.Allocator,
@@ -237,6 +238,7 @@ pub const ParseResult = struct {
             .values = std.StringHashMap(ParsedValue).init(allocator),
             .positionals = .empty,
             .remaining = .empty,
+            .owned_slices = .empty,
             .subcommand = null,
             .subcommand_args = null,
             .allocator = allocator,
@@ -244,13 +246,29 @@ pub const ParseResult = struct {
     }
 
     pub fn deinit(self: *ParseResult) void {
+        for (self.owned_slices.items) |slice| {
+            self.allocator.free(slice);
+        }
+        self.owned_slices.deinit(self.allocator);
+
         self.values.deinit();
         self.positionals.deinit(self.allocator);
         self.remaining.deinit(self.allocator);
+
         if (self.subcommand_args) |sub| {
             sub.deinit();
             self.allocator.destroy(sub);
         }
+    }
+
+    /// Registers a slice as owned by this parse result.
+    pub fn ownSlice(self: *ParseResult, slice: []const u8) !void {
+        try self.owned_slices.append(self.allocator, slice);
+    }
+
+    /// Inserts or replaces a parsed value.
+    pub fn put(self: *ParseResult, name: []const u8, value: ParsedValue) !void {
+        try self.values.put(name, value);
     }
 
     /// Get a value by name.

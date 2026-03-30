@@ -136,6 +136,7 @@ pub const ArgSpec = struct {
     name: []const u8,
     short: ?u8 = null,
     long: ?[]const u8 = null,
+    aliases: []const []const u8 = &.{},
     help: ?[]const u8 = null,
     value_type: ValueType = .string,
     action: ArgAction = .store,
@@ -150,6 +151,9 @@ pub const ArgSpec = struct {
     hidden: bool = false,
     group: ?[]const u8 = null,
     deprecated: ?[]const u8 = null,
+    validator: ?validation.ValidatorFn = null,
+    callback: ?CallbackFn = null,
+    expect: []const []const u8 = &.{},
 };
 ```
 
@@ -221,6 +225,7 @@ pub const Config = struct {
     allow_short_clusters: bool = true,
     allow_inline_values: bool = true,
     allow_interspersed: bool = true,
+    allow_negated_flags: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
 };
@@ -233,6 +238,11 @@ pub const Config = struct {
 | `Config.default()` | All features enabled |
 | `Config.minimal()` | No colors, updates, or auto-exit |
 | `Config.verbose()` | Extra debugging info |
+
+### Config Notes
+
+- When `allow_negated_flags` is `true`, long boolean options support `--no-<name>`.
+- When `case_sensitive` is `false`, long option names and `choices` / `expect` checks are ASCII case-insensitive.
 
 ## Shell
 
@@ -303,4 +313,50 @@ _ = try builder.setVersion("1.0").setDescription("My App")
 
 const spec = builder.build();
 // Use spec with Parser...
+```
+
+## Prompt Selection Types
+
+These helper types support interactive CMD-style selection flows.
+
+```zig
+pub const PromptSelectOrAllOptions = struct {
+    select_key: []const u8 = "select",
+    all_key: []const u8 = "all",
+    question: []const u8 = "Choose target",
+    choices: []const []const u8,
+    default_choice: ?[]const u8 = null,
+    allow_all: bool = true,
+    case_sensitive: bool = false,
+    max_attempts: usize = 3,
+};
+
+pub const PromptSelectOrAllDecision = union(enum) {
+    all: void,
+    selected: []const u8,
+};
+```
+
+## Include/Exclude Helper Types
+
+These helper types support strict filter workflows.
+
+```zig
+pub const IncludeExcludeStrictOptions = struct {
+    include_key: []const u8 = "include",
+    exclude_key: []const u8 = "exclude",
+    choices: []const []const u8 = &.{},
+    all_keyword: ?[]const u8 = "all",
+    case_sensitive: bool = false,
+    allow_prefix_match: bool = true,
+    dedupe: bool = true,
+    fail_on_conflicts: bool = true,
+};
+
+pub const IncludeExcludeStrictResolved = struct {
+    all: bool,
+    include: [][]const u8,
+    exclude: [][]const u8,
+    allocator: std.mem.Allocator,
+};
 ```

@@ -47,12 +47,26 @@ A production-grade, high-performance command-line argument parsing library for Z
 - [**Colored Output**](https://muhammad-fiaz.github.io/args.zig/guide/configuration#display-options) - ANSI color support for beautiful terminal output
 - [**Update Checker**](https://muhammad-fiaz.github.io/args.zig/guide/updates) - Automatic non-blocking update notifications (enabled by default)
 - [**Comprehensive Validation**](https://muhammad-fiaz.github.io/args.zig/guide/validation) - Type checking, choices, and custom validators for complex parsing
+- [**Negated Long Flags**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#negated-long-flags) - Familiar `--no-flag` support for boolean toggles
+- [**Configurable Matching**](https://muhammad-fiaz.github.io/args.zig/guide/configuration#case-insensitive-matching) - Optional case-insensitive matching for long options and choices
+- [**Inverse Flags API**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#inverse-boolean-flags) - `addFalseFlag` helper for explicit disable-style options
+- [**Positional Validation**](https://muhammad-fiaz.github.io/args.zig/guide/validation#positional-validation) - `choices`, `expect`, validators, and hidden positional support
+- [**CMD Selection Helpers**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#cmd-style-select-and-all) - Built-in `--select` and `--all` helper APIs
+- [**Question Flow Selection**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#question-based-selection-flow) - Prompt users to choose select/all when flags are omitted
+- [**Include/Exclude Filters**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#includeexclude-filters) - Reusable `--include` and `--exclude` helpers for CMD workflows
+- [**Strict Filter Resolution**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#strict-includeexclude-resolution) - Canonicalize choices, dedupe values, and detect include/exclude conflicts
 - [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage across all modules
 
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.3):
+Install the latest stable release (v0.0.4):
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
+```
+
+Install the previous stable release (v0.0.3):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
@@ -201,6 +215,83 @@ try parser.addOption("token", .{
 });
 ```
 
+### Negated Long Flags
+
+Long boolean flags support `--no-<name>` by default:
+
+```zig
+try parser.addFlag("cache", .{ .help = "Enable cache" });
+
+var result = try parser.parse(&[_][]const u8{"--no-cache"});
+defer result.deinit();
+
+const cache_enabled = result.getBool("cache") orelse true; // false
+```
+
+### Inverse Boolean Flags
+
+Use `addFalseFlag` when your primary option semantics are "disable this behavior":
+
+```zig
+try parser.addFalseFlag("color", .{ .help = "Disable color output" });
+
+var result = try parser.parse(&[_][]const u8{"--color"});
+defer result.deinit();
+
+const color_enabled = result.getBool("color") orelse true; // false
+```
+
+### CMD-Style Select And All
+
+Use helpers to quickly model common command patterns:
+
+```zig
+try parser.addSelectOrAll(.{
+    .select_short = 's',
+    .all_short = 'a',
+    .select_choices = &[_][]const u8{ "users", "groups" },
+});
+```
+
+This creates an exclusive pair (`--select <value>` vs `--all`).
+
+### Question-Based Selection Flow
+
+Resolve selection from parsed args or ask the user when missing:
+
+```zig
+const decision = try args.resolveSelectOrAllWithPrompt(allocator, &parsed, .{
+    .question = "Select target",
+    .choices = &[_][]const u8{ "users", "groups", "logs" },
+    .default_choice = "users",
+    .allow_all = true,
+});
+```
+
+### Include/Exclude Filters
+
+Use reusable helpers for filter-style commands:
+
+```zig
+try parser.addIncludeExclude(.{ .include_short = 'i', .exclude_short = 'x' });
+
+var parsed = try parser.parseProcess();
+defer parsed.deinit();
+
+var filters = try args.resolveIncludeExclude(allocator, &parsed, "include", "exclude");
+defer filters.deinit();
+```
+
+For stricter behavior (choice normalization, deduplication, and conflict checks):
+
+```zig
+var strict_filters = try args.resolveIncludeExcludeStrict(allocator, &parsed, .{
+    .choices = &[_][]const u8{ "users", "groups", "logs" },
+    .all_keyword = "all",
+});
+defer strict_filters.deinit();
+```
+
 ### Argument Groups
 
 ```zig
@@ -344,6 +435,13 @@ zig build test
 # Run examples
 zig build run-basic
 zig build run-advanced
+zig build run-config_modes
+zig build run-negated_flags
+zig build run-positional_validation
+zig build run-select_all
+zig build run-question_flow
+zig build run-include_exclude
+zig build run-include_exclude_strict
 
 # Run benchmarks
 zig build bench

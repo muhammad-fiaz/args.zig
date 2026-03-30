@@ -69,6 +69,21 @@ Errors that occur during value validation:
 | `PermissionDenied` | Insufficient permissions |
 | `InvalidPath` | Invalid path format |
 
+Prompt selection helpers may also return:
+
+| Error | Description |
+|-------|-------------|
+| `InvalidConfig` | Prompt configuration is inconsistent |
+| `InvalidChoice` | Prompt answer did not match allowed choices |
+| `InvalidValue` | Prompt attempts exceeded without valid input |
+| `EndOfStream` | Input stream ended before a valid answer |
+
+Strict include/exclude helpers may also return:
+
+| Error | Description |
+|-------|-------------|
+| `IncludeExcludeConflict` | Same value appeared in both include and exclude sets when conflict checks are enabled |
+
 ## Error Handling
 
 ### Basic Error Handling

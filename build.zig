@@ -17,6 +17,13 @@ pub fn build(b: *std.Build) void {
     const examples = [_]struct { name: []const u8, path: []const u8, skip_run_all: bool = false }{
         .{ .name = "basic", .path = "examples/basic.zig" },
         .{ .name = "advanced", .path = "examples/advanced.zig" },
+        .{ .name = "config_modes", .path = "examples/config_modes.zig" },
+        .{ .name = "negated_flags", .path = "examples/negated_flags.zig" },
+        .{ .name = "positional_validation", .path = "examples/positional_validation.zig" },
+        .{ .name = "select_all", .path = "examples/select_all.zig" },
+        .{ .name = "question_flow", .path = "examples/question_flow.zig" },
+        .{ .name = "include_exclude", .path = "examples/include_exclude.zig" },
+        .{ .name = "include_exclude_strict", .path = "examples/include_exclude_strict.zig" },
         .{ .name = "custom_parsing", .path = "examples/custom_parsing.zig" },
         .{ .name = "callbacks", .path = "examples/callbacks.zig" },
         .{ .name = "key_value", .path = "examples/key_value.zig" },

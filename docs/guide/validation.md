@@ -38,6 +38,18 @@ Behavior depends on `Config`:
 - **Strict Mode**: behaves like `choices` (errors on mismatch).
 - **Permissive Mode** (default): prints a warning if value is not in `expect` list, but accepts it.
 
+## Positional Validation
+
+Validation options are available for positional arguments too.
+
+```zig
+try parser.addPositional("mode", .{
+    .choices = &[_][]const u8{ "dev", "prod" },
+});
+```
+
+`addPositional` also supports `.expect`, `.validator`, and `.hidden`.
+
 
 ## Custom Validators
 

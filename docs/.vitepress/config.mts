@@ -4,7 +4,7 @@ import llmstxt from "vitepress-plugin-llms";
 // Site configuration
 export const SITE_URL = "https://muhammad-fiaz.github.io/args.zig";
 export const SITE_NAME = "args.zig";
-export const SITE_DESCRIPTION = "A fast, powerful, and developer-friendly command-line argument parsing library for Zig with Python argparse-inspired API, shell completions, environment variables, and subcommands.";
+export const SITE_DESCRIPTION = "A fast, powerful, and developer-friendly command-line argument parsing library for Zig with argparse-inspired API, negated flags, shell completions, environment variables, subcommands, and strict include/exclude filter workflows.";
 
 // Google Analytics and Google Tag Manager IDs
 export const GA_ID = "G-6BVYCRK57P";
@@ -14,7 +14,7 @@ export const GTM_ID = "GTM-P4M9T8ZR";
 export const ADSENSE_CLIENT_ID = "ca-pub-2040560600290490";
 
 // SEO Keywords
-export const KEYWORDS = "zig, argument parser, cli, command line, argparse, shell completions, bash completion, zsh completion, fish completion, powershell completion, environment variables, subcommands, zig library, cli parsing";
+export const KEYWORDS = "zig, argument parser, cli, command line, argparse, negated flags, boolean flags, select all, interactive prompt, question flow, include exclude, strict filters, shell completions, bash completion, zsh completion, fish completion, powershell completion, environment variables, subcommands, zig library, cli parsing";
 
 export default defineConfig({
   lang: "en-US",
@@ -124,7 +124,7 @@ gtag('config', '${GA_ID}');`,
 
   ignoreDeadLinks: [/.*\.zig$/],
 
-  transformPageData(pageData) {
+  transformPageData(pageData: any) {
     const pageTitle = pageData.title || SITE_NAME;
     const pageDescription = pageData.description || SITE_DESCRIPTION;
     const canonicalUrl = `${SITE_URL}/${pageData.relativePath.replace(/((^|\/)index)?\.md$/, '$2').replace(/\.md$/, '')}`;
@@ -208,7 +208,7 @@ gtag('config', '${GA_ID}');`,
           "priceCurrency": "USD"
         },
         "downloadUrl": "https://github.com/muhammad-fiaz/args.zig",
-        "softwareVersion": "0.0.2", 
+        "softwareVersion": "0.0.4", 
         "license": "https://opensource.org/licenses/MIT"
       });
     } else {
@@ -244,9 +244,9 @@ gtag('config', '${GA_ID}');`,
       const pathParts = pageData.relativePath.replace(/\.md$/, '').split('/');
       let currentPath = SITE_URL;
       
-      pathParts.forEach((part, index) => {
+      pathParts.forEach((part: string, index: number) => {
         currentPath += `/${part}`;
-        const name = part.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+        const name = part.split('-').map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
         
         breadcrumbs.push({
           "@type": "ListItem",

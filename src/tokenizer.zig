@@ -32,14 +32,26 @@ pub const Token = struct {
 
 /// Tokenizes command-line arguments into a stream of tokens.
 pub const Tokenizer = struct {
+    pub const Options = struct {
+        allow_short_clusters: bool = true,
+        allow_inline_values: bool = true,
+        allow_interspersed: bool = true,
+    };
+
     args: []const []const u8,
     index: usize = 0,
     past_separator: bool = false,
+    seen_positional: bool = false,
     cluster: ?[]const u8 = null,
     cluster_index: usize = 0,
+    options: Options = .{},
 
     pub fn init(args: []const []const u8) Tokenizer {
         return .{ .args = args };
+    }
+
+    pub fn initWithOptions(args: []const []const u8, options: Options) Tokenizer {
+        return .{ .args = args, .options = options };
     }
 
     pub fn next(self: *Tokenizer) Token {
@@ -72,6 +84,10 @@ pub const Tokenizer = struct {
             return .{ .token_type = .value, .raw = arg, .position = position };
         }
 
+        if (!self.options.allow_interspersed and self.seen_positional) {
+            return .{ .token_type = .value, .raw = arg, .position = position };
+        }
+
         if (utils.eql(arg, "--")) {
             self.past_separator = true;
             return .{ .token_type = .separator, .raw = arg, .position = position };
@@ -79,14 +95,16 @@ pub const Tokenizer = struct {
 
         if (arg.len > 2 and utils.startsWith(arg, "--")) {
             const content = arg[2..];
-            if (utils.indexOf(content, '=')) |eq_pos| {
-                return .{
-                    .token_type = .option_with_value,
-                    .raw = arg,
-                    .name = content[0..eq_pos],
-                    .inline_value = content[eq_pos + 1 ..],
-                    .position = position,
-                };
+            if (self.options.allow_inline_values) {
+                if (utils.indexOf(content, '=')) |eq_pos| {
+                    return .{
+                        .token_type = .option_with_value,
+                        .raw = arg,
+                        .name = content[0..eq_pos],
+                        .inline_value = content[eq_pos + 1 ..],
+                        .position = position,
+                    };
+                }
             }
             return .{
                 .token_type = .long_option,
@@ -98,15 +116,17 @@ pub const Tokenizer = struct {
 
         if (arg.len >= 2 and arg[0] == '-' and arg[1] != '-') {
             const content = arg[1..];
-            if (utils.indexOf(content, '=')) |eq_pos| {
-                if (eq_pos == 1) {
-                    return .{
-                        .token_type = .option_with_value,
-                        .raw = arg,
-                        .name = content[0..1],
-                        .inline_value = content[2..],
-                        .position = position,
-                    };
+            if (self.options.allow_inline_values) {
+                if (utils.indexOf(content, '=')) |eq_pos| {
+                    if (eq_pos == 1) {
+                        return .{
+                            .token_type = .option_with_value,
+                            .raw = arg,
+                            .name = content[0..1],
+                            .inline_value = content[2..],
+                            .position = position,
+                        };
+                    }
                 }
             }
             if (content.len == 1) {
@@ -117,16 +137,23 @@ pub const Tokenizer = struct {
                     .position = position,
                 };
             }
-            self.cluster = content;
-            self.cluster_index = 1;
-            return .{
-                .token_type = .short_option,
-                .raw = content[0..1],
-                .name = content[0..1],
-                .position = position,
-            };
+
+            if (self.options.allow_short_clusters) {
+                self.cluster = content;
+                self.cluster_index = 1;
+                return .{
+                    .token_type = .short_option,
+                    .raw = content[0..1],
+                    .name = content[0..1],
+                    .position = position,
+                };
+            }
+
+            self.seen_positional = true;
+            return .{ .token_type = .value, .raw = arg, .position = position };
         }
 
+        self.seen_positional = true;
         return .{ .token_type = .value, .raw = arg, .position = position };
     }
 
@@ -158,6 +185,7 @@ pub const Tokenizer = struct {
     pub fn reset(self: *Tokenizer) void {
         self.index = 0;
         self.past_separator = false;
+        self.seen_positional = false;
         self.cluster = null;
         self.cluster_index = 0;
     }
@@ -237,4 +265,28 @@ test "Tokenizer reset" {
 
     tokenizer.reset();
     try std.testing.expect(tokenizer.hasMore());
+}
+
+test "Tokenizer options disable short clusters" {
+    var tokenizer = Tokenizer.initWithOptions(&[_][]const u8{"-abc"}, .{ .allow_short_clusters = false });
+    const tok = tokenizer.next();
+    try std.testing.expectEqual(TokenType.value, tok.token_type);
+    try std.testing.expectEqualStrings("-abc", tok.raw);
+}
+
+test "Tokenizer options disable inline values" {
+    var tokenizer = Tokenizer.initWithOptions(&[_][]const u8{"--output=file.txt"}, .{ .allow_inline_values = false });
+    const tok = tokenizer.next();
+    try std.testing.expectEqual(TokenType.long_option, tok.token_type);
+    try std.testing.expectEqualStrings("output=file.txt", tok.name.?);
+}
+
+test "Tokenizer options disable interspersed" {
+    var tokenizer = Tokenizer.initWithOptions(&[_][]const u8{ "input.txt", "--flag" }, .{ .allow_interspersed = false });
+    const first = tokenizer.next();
+    try std.testing.expectEqual(TokenType.value, first.token_type);
+
+    const second = tokenizer.next();
+    try std.testing.expectEqual(TokenType.value, second.token_type);
+    try std.testing.expectEqualStrings("--flag", second.raw);
 }

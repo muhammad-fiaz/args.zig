@@ -55,8 +55,134 @@ myapp --loud       # Same as --verbose
 myapp --debug      # Same as --verbose
 ```
 
-myapp -vq          # verbose = true, quiet = true (clustered)
+## Negated Long Flags
+
+Boolean long flags support `--no-<name>` out of the box:
+
+```zig
+try parser.addFlag("cache", .{
+    .help = "Enable cache",
+});
 ```
+
+Usage:
+```bash
+myapp --cache       # cache = true
+myapp --no-cache    # cache = false
+```
+
+Disable this behavior in config when needed:
+
+```zig
+.config = .{ .allow_negated_flags = false }
+```
+
+## Inverse Boolean Flags
+
+If your CLI uses disable-first semantics, use `addFalseFlag`.
+
+```zig
+try parser.addFalseFlag("color", .{
+    .help = "Disable color output",
+});
+```
+
+Usage:
+
+```bash
+myapp --color      # stores false
+```
+
+## CMD-Style Select And All
+
+Many command tools support either selecting specific targets or all targets.
+
+```zig
+try parser.addSelectOrAll(.{
+    .select_short = 's',
+    .all_short = 'a',
+    .select_choices = &[_][]const u8{ "users", "groups", "logs" },
+});
+```
+
+Generated behavior:
+
+```bash
+myapp --select users
+myapp --all
+```
+
+The pair is mutually exclusive by default.
+
+## Question-Based Selection Flow
+
+When users do not pass `--select` or `--all`, you can ask them interactively:
+
+```zig
+const decision = try args.resolveSelectOrAllWithPrompt(allocator, &parsed, .{
+    .question = "Select target",
+    .choices = &[_][]const u8{ "users", "groups", "logs" },
+    .default_choice = "users",
+    .allow_all = true,
+});
+```
+
+This supports:
+
+- Choosing by number or name
+- Unique prefix matches (e.g. `gr` => `groups`)
+- Optional `all` choice
+- Default fallback
+- Retry attempts with validation
+
+## CSV Selections Utility
+
+For CMD-style inputs like `--select users,logs`, parse values with:
+
+```zig
+const items = try args.parseCsvList(allocator, result.getString("select") orelse "");
+defer args.deinitCsvList(allocator, items);
+```
+
+This trims whitespace and skips empty entries.
+
+## Include/Exclude Filters
+
+For common filter pipelines, use built-in helpers:
+
+```zig
+try parser.addIncludeExclude(.{ .include_short = 'i', .exclude_short = 'x' });
+
+var parsed = try parser.parseProcess();
+defer parsed.deinit();
+
+var filters = try args.resolveIncludeExclude(allocator, &parsed, "include", "exclude");
+defer filters.deinit();
+```
+
+Accepted format is comma-separated values (e.g. `--include users,groups`).
+
+## Strict Include/Exclude Resolution
+
+When you want canonical item names, duplicate suppression, and overlap validation:
+
+```zig
+var strict_filters = try args.resolveIncludeExcludeStrict(allocator, &parsed, .{
+    .choices = &[_][]const u8{ "users", "groups", "logs" },
+    .all_keyword = "all",
+    .allow_prefix_match = true,
+    .dedupe = true,
+    .fail_on_conflicts = true,
+});
+defer strict_filters.deinit();
+```
+
+Behavior summary:
+
+- `include=gr` can resolve to `groups` with prefix matching.
+- Duplicate values are collapsed when `dedupe = true`.
+- Overlaps like `--include users --exclude users` return `error.IncludeExcludeConflict`.
+- `all_keyword` (default: `all`) enables full selection with selective exclusions.
 
 ## Key-Value Pairs
 

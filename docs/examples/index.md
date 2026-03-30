@@ -215,6 +215,105 @@ server --host 127.0.0.1
 server --secret "cli-secret" --port 9000
 ```
 
+## Configuration Modes Example
+
+`examples/config_modes.zig` demonstrates non-breaking parser behavior flags:
+
+- `case_sensitive = false` for case-insensitive long options
+- `allow_short_clusters = false` to treat `-abc` as a positional value
+- `allow_interspersed = false` to stop option parsing after first positional
+- `parsing_mode = .permissive` to collect unknown options in `remaining`
+
+Run it with:
+
+```bash
+zig build run-config_modes
+```
+
+## Negated Flags Example
+
+`examples/negated_flags.zig` demonstrates long-flag negation via `--no-<name>`:
+
+- `--no-cache` toggles `cache` to `false` for a `store_true` flag
+- `--no-color` toggles `color` to `true` for a `store_false` flag
+
+Run it with:
+
+```bash
+zig build run-negated_flags
+```
+
+## Positional Validation Example
+
+`examples/positional_validation.zig` demonstrates:
+
+- Positional `choices` validation
+- Explicit inverse flag helper `addFalseFlag`
+- Non-breaking strict parse behavior with clear constraints
+
+Run it with:
+
+```bash
+zig build run-positional_validation
+```
+
+## Select/All Example
+
+`examples/select_all.zig` demonstrates CMD-style targeting helpers:
+
+- `addSelectOption` for `--select <value>`
+- `addAllFlag` for `--all`
+- `addSelectOrAll` for one-call mutually exclusive setup
+- `parseCsvList` for parsing comma-separated selection values
+
+Run it with:
+
+```bash
+zig build run-select_all
+```
+
+## Question Flow Example
+
+`examples/question_flow.zig` demonstrates a production-ready interactive flow:
+
+- Use parsed `--select` / `--all` if present
+- Prompt for a choice when arguments are missing
+- Validate answers with retries, prefix matching, and suggestions
+
+Run it with:
+
+```bash
+zig build run-question_flow
+```
+
+## Include/Exclude Example
+
+`examples/include_exclude.zig` demonstrates reusable filter helpers:
+
+- `addIncludeExclude` for CLI schema setup
+- `resolveIncludeExclude` for parsed CSV list resolution
+
+Run it with:
+
+```bash
+zig build run-include_exclude
+```
+
+## Include/Exclude Strict Example
+
+`examples/include_exclude_strict.zig` demonstrates strict filter workflows:
+
+- Choice normalization (`gr` => `groups` when unique)
+- Duplicate suppression for repeated values
+- Optional `all` keyword handling with exclusions
+- Conflict detection between include and exclude values
+
+Run it with:
+
+```bash
+zig build run-include_exclude_strict
+```
+
 ## Counters and Choices Example
 
 Using counters for verbosity and choices for validation:

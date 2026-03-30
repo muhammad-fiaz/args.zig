@@ -41,6 +41,15 @@ features:
   - icon: ✅
     title: Robust Validation
     details: Built-in validation for types, choices, ranges, and custom rules. Comprehensive error reporting with "Did you mean?" suggestions.
+  - icon: 🚫
+    title: Negated Flags
+    details: Native `--no-flag` support for long boolean options, with config control for strict compatibility.
+  - icon: 🧹
+    title: Strict Filter Workflows
+    details: Built-in include/exclude helpers with optional canonicalization, dedupe, and conflict detection for production CMD pipelines.
+  - icon: 🎚️
+    title: Inverse Flag API
+    details: Use `addFalseFlag` for disable-style options that map directly to boolean false.
   - icon: 🛠️
     title: Modular Architecture
     details: Highly modular codebase with reusable utility components (internal utils.zig) and clear separation of concerns.
@@ -91,7 +100,13 @@ pub fn main() !void {
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.3):
+Install the latest stable release (v0.0.4):
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
+```
+
+Install the previous stable release (v0.0.3):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
@@ -119,5 +134,5 @@ exe.root_module.addImport("args", args_dep.module("args"));
 
 ## Current Version
 
-- **Package Version:** 0.0.3
+- **Package Version:** 0.0.4
 - **Minimum Zig Version:** 0.15.1

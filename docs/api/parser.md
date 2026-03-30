@@ -56,6 +56,12 @@ pub fn deinit(self: *ArgumentParser) void
 
 Releases all resources used by the parser.
 
+## Parsing Behavior Notes
+
+- Long boolean options support `--no-<name>` when `Config.allow_negated_flags = true` (default).
+- Inline values are rejected for flag-style actions (`store_true`, `store_false`, `count`, `help`, `version`).
+- When `Config.case_sensitive = false`, long option names and `choices` / `expect` checks are ASCII case-insensitive.
+
 ## Adding Arguments
 
 ### `addFlag`
@@ -119,6 +125,10 @@ pub fn addPositional(self: *ArgumentParser, name: []const u8, options: struct {
     default: ?[]const u8 = null,
     nargs: Nargs = .{ .exact = 1 },
     metavar: ?[]const u8 = null,
+    choices: []const []const u8 = &.{},
+    expect: []const []const u8 = &.{},
+    validator: ?validation.ValidatorFn = null,
+    hidden: bool = false,
 }) !void
 ```
 
@@ -131,6 +141,212 @@ try parser.addPositional("input", .{
     .required = true,
 });
 ```
+
+### `addFalseFlag`
+
+```zig
+pub fn addFalseFlag(self: *ArgumentParser, name: []const u8, options: struct {
+    short: ?u8 = null,
+    help: ?[]const u8 = null,
+    dest: ?[]const u8 = null,
+    hidden: bool = false,
+    aliases: []const []const u8 = &.{},
+    deprecated: ?[]const u8 = null,
+}) !void
+```
+
+Adds an inverse boolean flag that stores `false` when present.
+
+**Example:**
+```zig
+try parser.addFalseFlag("color", .{ .help = "Disable color output" });
+```
+
+### `addAllFlag`
+
+```zig
+pub fn addAllFlag(self: *ArgumentParser, options: struct {
+    name: []const u8 = "all",
+    short: ?u8 = null,
+    help: ?[]const u8 = "Select all items",
+    dest: ?[]const u8 = null,
+    hidden: bool = false,
+    aliases: []const []const u8 = &.{},
+    deprecated: ?[]const u8 = null,
+}) !void
+```
+
+### `addSelectOption`
+
+```zig
+pub fn addSelectOption(self: *ArgumentParser, options: struct {
+    name: []const u8 = "select",
+    short: ?u8 = null,
+    help: ?[]const u8 = "Select specific items",
+    value_type: ValueType = .string,
+    default: ?[]const u8 = null,
+    required: bool = false,
+    choices: []const []const u8 = &.{},
+    metavar: ?[]const u8 = null,
+    dest: ?[]const u8 = null,
+    env_var: ?[]const u8 = null,
+    hidden: bool = false,
+    aliases: []const []const u8 = &.{},
+    deprecated: ?[]const u8 = null,
+    validator: ?validation.ValidatorFn = null,
+    expect: []const []const u8 = &.{},
+}) !void
+```
+
+### `addSelectOrAll`
+
+Adds an exclusive helper pair around `--select` and `--all`.
+
+### `addIncludeOption`
+
+Adds a conventional `--include` option for comma-separated filters.
+
+### `addExcludeOption`
+
+Adds a conventional `--exclude` option for comma-separated filters.
+
+### `addIncludeExclude`
+
+Adds both include/exclude options under one group for help organization.
+
+### `PromptSelectOrAllOptions`
+
+```zig
+pub const PromptSelectOrAllOptions = struct {
+    select_key: []const u8 = "select",
+    all_key: []const u8 = "all",
+    question: []const u8 = "Choose target",
+    choices: []const []const u8,
+    default_choice: ?[]const u8 = null,
+    allow_all: bool = true,
+    case_sensitive: bool = false,
+    allow_prefix_match: bool = true,
+    suggest_closest: bool = true,
+    max_suggestion_distance: usize = 3,
+    max_attempts: usize = 3,
+};
+```
+
+### `PromptSelectOrAllDecision`
+
+```zig
+pub const PromptSelectOrAllDecision = union(enum) {
+    all: void,
+    selected: []const u8,
+};
+```
+
+### `resolveSelectOrAllWithPrompt`
+
+```zig
+pub fn resolveSelectOrAllWithPrompt(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: PromptSelectOrAllOptions,
+) !PromptSelectOrAllDecision
+```
+
+Uses parsed `--select` / `--all` first. If missing, prompts the user interactively and validates the answer.
+
+### `resolveSelectOrAllWithPromptIO`
+
+```zig
+pub fn resolveSelectOrAllWithPromptIO(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: PromptSelectOrAllOptions,
+    reader: anytype,
+    writer: anytype,
+) !PromptSelectOrAllDecision
+```
+
+Same behavior as `resolveSelectOrAllWithPrompt`, but with custom IO streams for tests and embedded runtimes.
+
+### `parseCsvList`
+
+```zig
+pub fn parseCsvList(allocator: std.mem.Allocator, raw: []const u8) ![][]const u8
+```
+
+Parses comma-separated values into trimmed non-empty items.
+
+### `deinitCsvList`
+
+```zig
+pub fn deinitCsvList(allocator: std.mem.Allocator, items: [][]const u8) void
+```
+
+Frees memory returned by `parseCsvList`.
+
+### `IncludeExcludeResolved`
+
+```zig
+pub const IncludeExcludeResolved = struct {
+    include: [][]const u8,
+    exclude: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *IncludeExcludeResolved) void
+};
+```
+
+### `IncludeExcludeStrictOptions`
+
+```zig
+pub const IncludeExcludeStrictOptions = struct {
+    include_key: []const u8 = "include",
+    exclude_key: []const u8 = "exclude",
+    choices: []const []const u8 = &.{},
+    all_keyword: ?[]const u8 = "all",
+    case_sensitive: bool = false,
+    allow_prefix_match: bool = true,
+    dedupe: bool = true,
+    fail_on_conflicts: bool = true,
+};
+```
+
+### `IncludeExcludeStrictResolved`
+
+```zig
+pub const IncludeExcludeStrictResolved = struct {
+    all: bool,
+    include: [][]const u8,
+    exclude: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *IncludeExcludeStrictResolved) void
+};
+```
+
+### `resolveIncludeExclude`
+
+```zig
+pub fn resolveIncludeExclude(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    include_key: []const u8,
+    exclude_key: []const u8,
+) !IncludeExcludeResolved
+```
+
+Parses include/exclude CSV strings from parse results into reusable lists.
+
+### `resolveIncludeExcludeStrict`
+
+```zig
+pub fn resolveIncludeExcludeStrict(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: IncludeExcludeStrictOptions,
+) !IncludeExcludeStrictResolved
+```
+
+Strict resolver for filter workflows with optional choice canonicalization, deduplication, `all` keyword handling, and conflict detection.
 
 ### `addCounter`
 

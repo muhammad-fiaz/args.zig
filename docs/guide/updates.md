@@ -9,6 +9,18 @@ head:
 
 # Update Checker Configuration
 
+## Latest Release Notes
+
+### v0.0.4
+
+- Fixed a Windows parsing lifetime bug where values returned from `parseProcess()` could reference freed argument buffers.
+- Parsed string values are now owned by the parse result and remain valid until `result.deinit()`.
+- Added negated long flags (`--no-flag`) and explicit inverse flag API (`addFalseFlag`).
+- Added configurable parser behavior flags and richer positional validation options.
+- Added CMD-style convenience helpers: `addSelectOption`, `addAllFlag`, and `addSelectOrAll`.
+- Added include/exclude helpers (`addIncludeExclude`) with parsed list resolver utilities.
+- Added strict include/exclude resolver (`resolveIncludeExcludeStrict`) with canonicalization, dedupe, and conflict detection.
+
 args.zig includes an optional non-blocking update checker that notifies users when a new version is available. By default, this feature is **enabled**. This guide explains how to configure or disable it.
 
 ## Why Disable?

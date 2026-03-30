@@ -18,7 +18,7 @@ const args = @import("args");
 
 const Config = struct {
     // Update checking
-    check_for_updates: bool = false,
+    check_for_updates: bool = true,
     show_update_notification: bool = true,
     
     // Display options
@@ -35,6 +35,7 @@ const Config = struct {
     allow_short_clusters: bool = true,
     allow_inline_values: bool = true,
     allow_interspersed: bool = true,
+    allow_negated_flags: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
     silent_errors: bool = false, // Suppress error output (for tests)
@@ -56,7 +57,7 @@ const Config = struct {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `check_for_updates` | `false` | Check for new versions on GitHub |
+| `check_for_updates` | `true` | Check for new versions on GitHub |
 | `show_update_notification` | `true` | Display notification if update available |
 
 ### Display Options
@@ -79,6 +80,7 @@ const Config = struct {
 | `allow_short_clusters` | `true` | Allow `-abc` as `-a -b -c` |
 | `allow_inline_values` | `true` | Allow `--opt=value` format |
 | `allow_interspersed` | `true` | Allow options after positionals |
+| `allow_negated_flags` | `true` | Allow `--no-flag` for boolean long options |
 | `case_sensitive` | `true` | Case-sensitive option matching |
 | `env_prefix` | `null` | Prefix for environment variables |
 | `silent_errors` | `false` | Suppress error/warning prints (for tests) |
@@ -227,4 +229,48 @@ Silently ignores unknown options:
 
 ```zig
 .config = .{ .parsing_mode = .ignore_unknown }
+```
+
+## Advanced Behavior Flags
+
+### Disable Short Clusters
+
+When disabled, `-abc` is treated as a positional value instead of `-a -b -c`.
+
+```zig
+.config = .{ .allow_short_clusters = false }
+```
+
+### Disable Inline Values
+
+When disabled, `--output=file.txt` and `-o=file.txt` are rejected as invalid format.
+
+```zig
+.config = .{ .allow_inline_values = false }
+```
+
+### Disable Interspersed Options
+
+When disabled, all values after the first positional are treated as positional.
+
+```zig
+.config = .{ .allow_interspersed = false }
+```
+
+### Case-Insensitive Matching
+
+When disabled, long option lookup and `choices` / `expect` value checks become ASCII case-insensitive.
+
+```zig
+.config = .{ .case_sensitive = false }
+// --VERBOSE matches --verbose
+// --level DEBUG matches choices = { "debug", ... }
+```
+
+### Disable Negated Long Flags
+
+When disabled, `--no-<name>` is treated as unknown.
+
+```zig
+.config = .{ .allow_negated_flags = false }
 ```

@@ -144,6 +144,29 @@ pub const ArgumentParser = struct {
         });
     }
 
+    /// Adds an inverse boolean flag argument (e.g., --no-color, --disable-cache).
+    /// When present, this stores `false` in the destination.
+    pub fn addFalseFlag(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        dest: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addArg(.{
+            .name = name,
+            .short = options.short,
+            .long = name,
+            .aliases = options.aliases,
+            .help = options.help,
+            .action = .store_false,
+            .dest = options.dest,
+            .hidden = options.hidden,
+            .deprecated = options.deprecated,
+        });
+    }
+
     /// Adds an option that expects a value (e.g., --output file.txt).
     pub fn addOption(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
@@ -189,6 +212,10 @@ pub const ArgumentParser = struct {
         default: ?[]const u8 = null,
         nargs: Nargs = .{ .exact = 1 },
         metavar: ?[]const u8 = null,
+        choices: []const []const u8 = &.{},
+        expect: []const []const u8 = &.{},
+        validator: ?validation.ValidatorFn = null,
+        hidden: bool = false,
     }) !void {
         try self.addArg(.{
             .name = name,
@@ -199,6 +226,10 @@ pub const ArgumentParser = struct {
             .default = options.default,
             .nargs = options.nargs,
             .metavar = options.metavar,
+            .choices = options.choices,
+            .expect = options.expect,
+            .validator = options.validator,
+            .hidden = options.hidden,
         });
     }
 
@@ -217,6 +248,215 @@ pub const ArgumentParser = struct {
             .value_type = .counter,
             .dest = options.dest,
         });
+    }
+
+    /// Adds a conventional `--all` flag used by many command-line tools.
+    pub fn addAllFlag(self: *ArgumentParser, options: struct {
+        name: []const u8 = "all",
+        short: ?u8 = null,
+        help: ?[]const u8 = "Select all items",
+        dest: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addFlag(options.name, .{
+            .short = options.short,
+            .help = options.help,
+            .dest = options.dest,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+        });
+    }
+
+    /// Adds a conventional `--select` option used to target a subset of items.
+    pub fn addSelectOption(self: *ArgumentParser, options: struct {
+        name: []const u8 = "select",
+        short: ?u8 = null,
+        help: ?[]const u8 = "Select specific items",
+        value_type: ValueType = .string,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        choices: []const []const u8 = &.{},
+        metavar: ?[]const u8 = null,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        try self.addOption(options.name, .{
+            .short = options.short,
+            .help = options.help,
+            .value_type = options.value_type,
+            .default = options.default,
+            .required = options.required,
+            .choices = options.choices,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = options.validator,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds an exclusive selection pair (`--select` vs `--all`) commonly used in CMD/CLI tools.
+    pub fn addSelectOrAll(self: *ArgumentParser, options: struct {
+        group_name: []const u8 = "Selection",
+        group_description: ?[]const u8 = "Target selection options",
+        required: bool = false,
+        select_name: []const u8 = "select",
+        select_short: ?u8 = null,
+        select_help: ?[]const u8 = "Select specific items",
+        select_value_type: ValueType = .string,
+        select_default: ?[]const u8 = null,
+        select_choices: []const []const u8 = &.{},
+        select_metavar: ?[]const u8 = null,
+        select_dest: ?[]const u8 = null,
+        select_env_var: ?[]const u8 = null,
+        select_aliases: []const []const u8 = &.{},
+        select_deprecated: ?[]const u8 = null,
+        select_validator: ?validation.ValidatorFn = null,
+        select_expect: []const []const u8 = &.{},
+        all_name: []const u8 = "all",
+        all_short: ?u8 = null,
+        all_help: ?[]const u8 = "Select all items",
+        all_dest: ?[]const u8 = null,
+        all_aliases: []const []const u8 = &.{},
+        all_deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addArgumentGroup(options.group_name, .{
+            .description = options.group_description,
+            .exclusive = true,
+            .required = options.required,
+        });
+
+        try self.addSelectOption(.{
+            .name = options.select_name,
+            .short = options.select_short,
+            .help = options.select_help,
+            .value_type = options.select_value_type,
+            .default = options.select_default,
+            .choices = options.select_choices,
+            .metavar = options.select_metavar,
+            .dest = options.select_dest,
+            .env_var = options.select_env_var,
+            .aliases = options.select_aliases,
+            .deprecated = options.select_deprecated,
+            .validator = options.select_validator,
+            .expect = options.select_expect,
+        });
+
+        try self.addAllFlag(.{
+            .name = options.all_name,
+            .short = options.all_short,
+            .help = options.all_help,
+            .dest = options.all_dest,
+            .aliases = options.all_aliases,
+            .deprecated = options.all_deprecated,
+        });
+
+        self.setGroup(null);
+    }
+
+    /// Adds a conventional `--include` option for comma-separated target filters.
+    pub fn addIncludeOption(self: *ArgumentParser, options: struct {
+        name: []const u8 = "include",
+        short: ?u8 = null,
+        help: ?[]const u8 = "Comma-separated include filters",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addOption(options.name, .{
+            .short = options.short,
+            .help = options.help,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .metavar = "LIST",
+        });
+    }
+
+    /// Adds a conventional `--exclude` option for comma-separated target filters.
+    pub fn addExcludeOption(self: *ArgumentParser, options: struct {
+        name: []const u8 = "exclude",
+        short: ?u8 = null,
+        help: ?[]const u8 = "Comma-separated exclude filters",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addOption(options.name, .{
+            .short = options.short,
+            .help = options.help,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .metavar = "LIST",
+        });
+    }
+
+    /// Adds both include/exclude filters under a shared group for better help organization.
+    pub fn addIncludeExclude(self: *ArgumentParser, options: struct {
+        group_name: []const u8 = "Filters",
+        group_description: ?[]const u8 = "Target filtering options",
+        include_name: []const u8 = "include",
+        include_short: ?u8 = null,
+        include_help: ?[]const u8 = "Comma-separated include filters",
+        include_dest: ?[]const u8 = null,
+        include_env_var: ?[]const u8 = null,
+        include_aliases: []const []const u8 = &.{},
+        include_deprecated: ?[]const u8 = null,
+        exclude_name: []const u8 = "exclude",
+        exclude_short: ?u8 = null,
+        exclude_help: ?[]const u8 = "Comma-separated exclude filters",
+        exclude_dest: ?[]const u8 = null,
+        exclude_env_var: ?[]const u8 = null,
+        exclude_aliases: []const []const u8 = &.{},
+        exclude_deprecated: ?[]const u8 = null,
+    }) !void {
+        try self.addArgumentGroup(options.group_name, .{
+            .description = options.group_description,
+            .exclusive = false,
+            .required = false,
+        });
+
+        try self.addIncludeOption(.{
+            .name = options.include_name,
+            .short = options.include_short,
+            .help = options.include_help,
+            .dest = options.include_dest,
+            .env_var = options.include_env_var,
+            .aliases = options.include_aliases,
+            .deprecated = options.include_deprecated,
+        });
+
+        try self.addExcludeOption(.{
+            .name = options.exclude_name,
+            .short = options.exclude_short,
+            .help = options.exclude_help,
+            .dest = options.exclude_dest,
+            .env_var = options.exclude_env_var,
+            .aliases = options.exclude_aliases,
+            .deprecated = options.exclude_deprecated,
+        });
+
+        self.setGroup(null);
     }
 
     /// Registers a subcommand.
@@ -617,6 +857,347 @@ pub const version = getLibraryVersion;
 /// This is a re-export of `schema.deriveOptions` for convenience.
 pub const deriveOptions = schema.deriveOptions;
 
+pub const PromptSelectOrAllOptions = struct {
+    select_key: []const u8 = "select",
+    all_key: []const u8 = "all",
+    question: []const u8 = "Choose target",
+    choices: []const []const u8,
+    default_choice: ?[]const u8 = null,
+    allow_all: bool = true,
+    case_sensitive: bool = false,
+    allow_prefix_match: bool = true,
+    suggest_closest: bool = true,
+    max_suggestion_distance: usize = 3,
+    max_attempts: usize = 3,
+};
+
+pub const PromptSelectOrAllDecision = union(enum) {
+    all: void,
+    selected: []const u8,
+};
+
+fn trimAsciiWhitespace(input: []const u8) []const u8 {
+    var start: usize = 0;
+    var end: usize = input.len;
+
+    while (start < input.len and std.ascii.isWhitespace(input[start])) : (start += 1) {}
+    while (end > start and std.ascii.isWhitespace(input[end - 1])) : (end -= 1) {}
+
+    return input[start..end];
+}
+
+fn equalsWithCase(a: []const u8, b: []const u8, case_sensitive: bool) bool {
+    if (case_sensitive) return std.mem.eql(u8, a, b);
+    return std.ascii.eqlIgnoreCase(a, b);
+}
+
+fn pickChoiceByName(input: []const u8, choices: []const []const u8, case_sensitive: bool) ?[]const u8 {
+    for (choices) |choice| {
+        if (equalsWithCase(choice, input, case_sensitive)) return choice;
+    }
+    return null;
+}
+
+fn startsWithCase(text: []const u8, prefix: []const u8, case_sensitive: bool) bool {
+    if (prefix.len > text.len) return false;
+    if (case_sensitive) return std.mem.startsWith(u8, text, prefix);
+    return std.ascii.eqlIgnoreCase(text[0..prefix.len], prefix);
+}
+
+fn pickChoiceByUniquePrefix(input: []const u8, choices: []const []const u8, case_sensitive: bool) ?[]const u8 {
+    var found: ?[]const u8 = null;
+    for (choices) |choice| {
+        if (startsWithCase(choice, input, case_sensitive)) {
+            if (found != null) return null;
+            found = choice;
+        }
+    }
+    return found;
+}
+
+/// Parses comma-separated values into trimmed non-empty items.
+/// The returned slice and each item are owned by the caller allocator.
+pub fn parseCsvList(allocator: std.mem.Allocator, raw: []const u8) ![][]const u8 {
+    var items = std.ArrayListUnmanaged([]const u8).empty;
+    errdefer {
+        for (items.items) |item| allocator.free(item);
+        items.deinit(allocator);
+    }
+
+    var it = std.mem.splitScalar(u8, raw, ',');
+    while (it.next()) |part| {
+        const trimmed = trimAsciiWhitespace(part);
+        if (trimmed.len == 0) continue;
+        const owned = try allocator.dupe(u8, trimmed);
+        try items.append(allocator, owned);
+    }
+
+    return items.toOwnedSlice(allocator);
+}
+
+/// Frees list returned by parseCsvList.
+pub fn deinitCsvList(allocator: std.mem.Allocator, items: [][]const u8) void {
+    for (items) |item| allocator.free(item);
+    allocator.free(items);
+}
+
+pub const IncludeExcludeResolved = struct {
+    include: [][]const u8,
+    exclude: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *IncludeExcludeResolved) void {
+        deinitCsvList(self.allocator, self.include);
+        deinitCsvList(self.allocator, self.exclude);
+    }
+};
+
+pub const IncludeExcludeStrictOptions = struct {
+    include_key: []const u8 = "include",
+    exclude_key: []const u8 = "exclude",
+    choices: []const []const u8 = &.{},
+    all_keyword: ?[]const u8 = "all",
+    case_sensitive: bool = false,
+    allow_prefix_match: bool = true,
+    dedupe: bool = true,
+    fail_on_conflicts: bool = true,
+};
+
+pub const IncludeExcludeStrictResolved = struct {
+    all: bool,
+    include: [][]const u8,
+    exclude: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *IncludeExcludeStrictResolved) void {
+        deinitCsvList(self.allocator, self.include);
+        deinitCsvList(self.allocator, self.exclude);
+    }
+};
+
+fn indexOfFilterValue(items: [][]const u8, value: []const u8, case_sensitive: bool) ?usize {
+    for (items, 0..) |item, idx| {
+        if (equalsWithCase(item, value, case_sensitive)) return idx;
+    }
+    return null;
+}
+
+fn appendFilterValue(
+    allocator: std.mem.Allocator,
+    items: *std.ArrayListUnmanaged([]const u8),
+    value: []const u8,
+    case_sensitive: bool,
+    dedupe: bool,
+) !void {
+    if (dedupe and indexOfFilterValue(items.items, value, case_sensitive) != null) return;
+
+    const owned = try allocator.dupe(u8, value);
+    errdefer allocator.free(owned);
+    try items.append(allocator, owned);
+}
+
+fn normalizeFilterValue(raw_value: []const u8, options: IncludeExcludeStrictOptions) ![]const u8 {
+    if (options.choices.len == 0) return raw_value;
+
+    if (pickChoiceByName(raw_value, options.choices, options.case_sensitive)) |matched| {
+        return matched;
+    }
+
+    if (options.allow_prefix_match) {
+        if (pickChoiceByUniquePrefix(raw_value, options.choices, options.case_sensitive)) |matched| {
+            return matched;
+        }
+    }
+
+    return error.InvalidChoice;
+}
+
+pub fn resolveIncludeExclude(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    include_key: []const u8,
+    exclude_key: []const u8,
+) !IncludeExcludeResolved {
+    const include_raw = parsed.getString(include_key) orelse "";
+    const exclude_raw = parsed.getString(exclude_key) orelse "";
+
+    return .{
+        .include = try parseCsvList(allocator, include_raw),
+        .exclude = try parseCsvList(allocator, exclude_raw),
+        .allocator = allocator,
+    };
+}
+
+pub fn resolveIncludeExcludeStrict(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: IncludeExcludeStrictOptions,
+) !IncludeExcludeStrictResolved {
+    var include_out = std.ArrayListUnmanaged([]const u8).empty;
+    errdefer {
+        for (include_out.items) |item| allocator.free(item);
+        include_out.deinit(allocator);
+    }
+
+    var exclude_out = std.ArrayListUnmanaged([]const u8).empty;
+    errdefer {
+        for (exclude_out.items) |item| allocator.free(item);
+        exclude_out.deinit(allocator);
+    }
+
+    const include_raw = parsed.getString(options.include_key) orelse "";
+    const exclude_raw = parsed.getString(options.exclude_key) orelse "";
+
+    const include_items = try parseCsvList(allocator, include_raw);
+    defer deinitCsvList(allocator, include_items);
+    const exclude_items = try parseCsvList(allocator, exclude_raw);
+    defer deinitCsvList(allocator, exclude_items);
+
+    var all = false;
+
+    for (include_items) |raw_item| {
+        if (options.all_keyword) |all_keyword| {
+            if (equalsWithCase(raw_item, all_keyword, options.case_sensitive)) {
+                all = true;
+                continue;
+            }
+        }
+
+        const normalized = try normalizeFilterValue(raw_item, options);
+        try appendFilterValue(allocator, &include_out, normalized, options.case_sensitive, options.dedupe);
+    }
+
+    for (exclude_items) |raw_item| {
+        const normalized = try normalizeFilterValue(raw_item, options);
+        try appendFilterValue(allocator, &exclude_out, normalized, options.case_sensitive, options.dedupe);
+    }
+
+    if (all) {
+        for (include_out.items) |item| allocator.free(item);
+        include_out.clearAndFree(allocator);
+    }
+
+    if (options.fail_on_conflicts and !all) {
+        for (include_out.items) |item| {
+            if (indexOfFilterValue(exclude_out.items, item, options.case_sensitive) != null) {
+                return error.IncludeExcludeConflict;
+            }
+        }
+    }
+
+    return .{
+        .all = all,
+        .include = try include_out.toOwnedSlice(allocator),
+        .exclude = try exclude_out.toOwnedSlice(allocator),
+        .allocator = allocator,
+    };
+}
+
+fn writePromptMenu(writer: anytype, options: PromptSelectOrAllOptions) !void {
+    try writer.print("{s}:\n", .{options.question});
+    if (options.allow_all) {
+        try writer.writeAll("  0) all\n");
+    }
+    for (options.choices, 0..) |choice, idx| {
+        try writer.print("  {d}) {s}\n", .{ idx + 1, choice });
+    }
+    try writer.writeAll("Enter number or name: ");
+}
+
+pub fn resolveSelectOrAllWithPromptIO(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: PromptSelectOrAllOptions,
+    reader: anytype,
+    writer: anytype,
+) !PromptSelectOrAllDecision {
+    if (options.choices.len == 0 and !options.allow_all) return error.InvalidConfig;
+
+    if (parsed.getBool(options.all_key)) |enabled| {
+        if (enabled) return .{ .all = {} };
+    }
+
+    if (parsed.getString(options.select_key)) |selected| {
+        if (options.choices.len > 0) {
+            if (pickChoiceByName(selected, options.choices, options.case_sensitive)) |matched| {
+                return .{ .selected = matched };
+            }
+            if (options.allow_prefix_match) {
+                if (pickChoiceByUniquePrefix(selected, options.choices, options.case_sensitive)) |matched| {
+                    return .{ .selected = matched };
+                }
+            }
+            return error.InvalidChoice;
+        }
+        return .{ .selected = selected };
+    }
+
+    var attempts_left = options.max_attempts;
+    while (attempts_left > 0) : (attempts_left -= 1) {
+        try writePromptMenu(writer, options);
+
+        const line_opt = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
+        if (line_opt == null) return error.EndOfStream;
+        defer allocator.free(line_opt.?);
+
+        const answer = trimAsciiWhitespace(line_opt.?);
+
+        if (answer.len == 0) {
+            if (options.default_choice) |def| {
+                if (options.allow_all and equalsWithCase(def, "all", options.case_sensitive)) {
+                    return .{ .all = {} };
+                }
+                if (pickChoiceByName(def, options.choices, options.case_sensitive)) |matched| {
+                    return .{ .selected = matched };
+                }
+            }
+            try writer.writeAll("Invalid selection. Try again.\n");
+            continue;
+        }
+
+        if (options.allow_all and (equalsWithCase(answer, "all", options.case_sensitive) or std.mem.eql(u8, answer, "0"))) {
+            return .{ .all = {} };
+        }
+
+        const parsed_index = std.fmt.parseInt(usize, answer, 10) catch null;
+        if (parsed_index) |idx| {
+            if (idx >= 1 and idx <= options.choices.len) {
+                return .{ .selected = options.choices[idx - 1] };
+            }
+        }
+
+        if (pickChoiceByName(answer, options.choices, options.case_sensitive)) |matched| {
+            return .{ .selected = matched };
+        }
+
+        if (options.allow_prefix_match) {
+            if (pickChoiceByUniquePrefix(answer, options.choices, options.case_sensitive)) |matched| {
+                return .{ .selected = matched };
+            }
+        }
+
+        if (options.suggest_closest and options.choices.len > 0) {
+            if (utils.findClosest(answer, options.choices, options.max_suggestion_distance)) |suggestion| {
+                try writer.print("Did you mean '{s}'?\n", .{suggestion});
+            }
+        }
+
+        try writer.writeAll("Invalid selection. Try again.\n");
+    }
+
+    return error.InvalidValue;
+}
+
+pub fn resolveSelectOrAllWithPrompt(
+    allocator: std.mem.Allocator,
+    parsed: *const ParseResult,
+    options: PromptSelectOrAllOptions,
+) !PromptSelectOrAllDecision {
+    const reader = std.fs.File.stdin().deprecatedReader();
+    const writer = std.fs.File.stdout().deprecatedWriter();
+    return resolveSelectOrAllWithPromptIO(allocator, parsed, options, reader, writer);
+}
+
 /// Quick parse from process args with minimal setup.
 /// Convenience function that creates a parser, adds specs, and parses in one call.
 pub fn quickParse(
@@ -865,7 +1446,7 @@ test "disableUpdateCheck and enableUpdateCheck" {
 
 test "getLibraryVersion" {
     const ver = getLibraryVersion();
-    try std.testing.expectEqualStrings("0.0.3", ver);
+    try std.testing.expectEqualStrings("0.0.4", ver);
 }
 
 test "ArgumentParser subcommand" {
@@ -974,6 +1555,57 @@ test "ArgumentParser addHiddenFlag" {
     try std.testing.expect(ap.hasArg("debug-internal"));
 }
 
+test "ArgumentParser addFalseFlag" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "test",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFalseFlag("color", .{ .short = 'C' });
+
+    const args = [_][]const u8{"--color"};
+    var result = try ap.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqual(@as(?bool, false), result.getBool("color"));
+}
+
+test "ArgumentParser addPositional choices and hidden" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "test",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addPositional("mode", .{ .choices = &[_][]const u8{ "dev", "prod" } });
+    try ap.addPositional("internal", .{ .required = false, .hidden = true });
+
+    {
+        const args = [_][]const u8{"prod"};
+        var result = try ap.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("prod", result.getString("mode").?);
+    }
+
+    {
+        const args = [_][]const u8{"staging"};
+        try std.testing.expectError(error.InvalidChoice, ap.parse(&args));
+    }
+
+    const help_text = try ap.getHelp();
+    defer allocator.free(help_text);
+    try std.testing.expect(std.mem.indexOf(u8, help_text, "<internal>") == null);
+
+    const usage = try ap.getUsage();
+    defer allocator.free(usage);
+    try std.testing.expect(std.mem.indexOf(u8, usage, "<internal>") == null);
+}
+
 test "ArgumentParser addDeprecated" {
     const allocator = std.testing.allocator;
 
@@ -986,6 +1618,255 @@ test "ArgumentParser addDeprecated" {
     try ap.addDeprecated("old-flag", "Use --new-flag instead", .{});
 
     try std.testing.expect(ap.hasArg("old-flag"));
+}
+
+test "ArgumentParser addAllFlag and addSelectOption" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "cmd",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addAllFlag(.{ .short = 'a' });
+    try ap.addSelectOption(.{ .short = 's', .choices = &[_][]const u8{ "users", "groups" } });
+
+    {
+        const argv = [_][]const u8{"--all"};
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqual(@as(?bool, true), result.getBool("all"));
+    }
+
+    {
+        const argv = [_][]const u8{ "--select", "users" };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("users", result.getString("select").?);
+    }
+}
+
+test "ArgumentParser addSelectOrAll exclusivity" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "cmd",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addSelectOrAll(.{ .select_short = 's', .all_short = 'a' });
+
+    {
+        const argv = [_][]const u8{ "--select", "users" };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("users", result.getString("select").?);
+    }
+
+    {
+        const argv = [_][]const u8{"--all"};
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqual(@as(?bool, true), result.getBool("all"));
+    }
+
+    {
+        const argv = [_][]const u8{ "--select", "users", "--all" };
+        try std.testing.expectError(error.MutuallyExclusive, ap.parse(&argv));
+    }
+}
+
+test "resolveSelectOrAllWithPromptIO uses parsed values first" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "cmd", .config = Config.minimal() });
+    defer ap.deinit();
+
+    try ap.addSelectOrAll(.{ .select_choices = &[_][]const u8{ "users", "groups" } });
+
+    const argv = [_][]const u8{ "--select", "users" };
+    var parsed = try ap.parse(&argv);
+    defer parsed.deinit();
+
+    var input_stream = std.io.fixedBufferStream("\n");
+    var out_buf: [256]u8 = undefined;
+    var output_stream = std.io.fixedBufferStream(&out_buf);
+
+    const decision = try resolveSelectOrAllWithPromptIO(
+        allocator,
+        &parsed,
+        .{ .choices = &[_][]const u8{ "users", "groups" } },
+        input_stream.reader(),
+        output_stream.writer(),
+    );
+
+    try std.testing.expect(decision == .selected);
+    try std.testing.expectEqualStrings("users", decision.selected);
+}
+
+test "resolveSelectOrAllWithPromptIO can choose all" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    var input_stream = std.io.fixedBufferStream("all\n");
+    var out_buf: [512]u8 = undefined;
+    var output_stream = std.io.fixedBufferStream(&out_buf);
+
+    const decision = try resolveSelectOrAllWithPromptIO(
+        allocator,
+        &parsed,
+        .{ .choices = &[_][]const u8{ "users", "groups" }, .question = "Select target" },
+        input_stream.reader(),
+        output_stream.writer(),
+    );
+
+    try std.testing.expect(decision == .all);
+}
+
+test "resolveSelectOrAllWithPromptIO retries invalid answers" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    var input_stream = std.io.fixedBufferStream("bad\n2\n");
+    var out_buf: [1024]u8 = undefined;
+    var output_stream = std.io.fixedBufferStream(&out_buf);
+
+    const decision = try resolveSelectOrAllWithPromptIO(
+        allocator,
+        &parsed,
+        .{ .choices = &[_][]const u8{ "users", "groups", "logs" }, .max_attempts = 3 },
+        input_stream.reader(),
+        output_stream.writer(),
+    );
+
+    try std.testing.expect(decision == .selected);
+    try std.testing.expectEqualStrings("groups", decision.selected);
+}
+
+test "resolveSelectOrAllWithPromptIO supports unique prefix" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    var input_stream = std.io.fixedBufferStream("gr\n");
+    var out_buf: [512]u8 = undefined;
+    var output_stream = std.io.fixedBufferStream(&out_buf);
+
+    const decision = try resolveSelectOrAllWithPromptIO(
+        allocator,
+        &parsed,
+        .{ .choices = &[_][]const u8{ "users", "groups", "logs" }, .allow_prefix_match = true },
+        input_stream.reader(),
+        output_stream.writer(),
+    );
+
+    try std.testing.expect(decision == .selected);
+    try std.testing.expectEqualStrings("groups", decision.selected);
+}
+
+test "parseCsvList trims and drops empty values" {
+    const allocator = std.testing.allocator;
+
+    const items = try parseCsvList(allocator, " users,groups, ,logs ,, ");
+    defer deinitCsvList(allocator, items);
+
+    try std.testing.expectEqual(@as(usize, 3), items.len);
+    try std.testing.expectEqualStrings("users", items[0]);
+    try std.testing.expectEqualStrings("groups", items[1]);
+    try std.testing.expectEqualStrings("logs", items[2]);
+}
+
+test "ArgumentParser addIncludeExclude helpers" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "cmd",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addIncludeExclude(.{ .include_short = 'i', .exclude_short = 'x' });
+
+    const argv = [_][]const u8{ "--include", "users,logs", "--exclude", "logs" };
+    var parsed = try ap.parse(&argv);
+    defer parsed.deinit();
+
+    try std.testing.expectEqualStrings("users,logs", parsed.getString("include").?);
+    try std.testing.expectEqualStrings("logs", parsed.getString("exclude").?);
+
+    var resolved = try resolveIncludeExclude(allocator, &parsed, "include", "exclude");
+    defer resolved.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), resolved.include.len);
+    try std.testing.expectEqual(@as(usize, 1), resolved.exclude.len);
+    try std.testing.expectEqualStrings("users", resolved.include[0]);
+    try std.testing.expectEqualStrings("logs", resolved.include[1]);
+    try std.testing.expectEqualStrings("logs", resolved.exclude[0]);
+}
+
+test "resolveIncludeExcludeStrict normalizes and dedupes values" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    try parsed.put("include", .{ .string = "users,gr,users" });
+    try parsed.put("exclude", .{ .string = "logs,logs" });
+
+    var resolved = try resolveIncludeExcludeStrict(allocator, &parsed, .{
+        .choices = &[_][]const u8{ "users", "groups", "logs" },
+    });
+    defer resolved.deinit();
+
+    try std.testing.expect(!resolved.all);
+    try std.testing.expectEqual(@as(usize, 2), resolved.include.len);
+    try std.testing.expectEqual(@as(usize, 1), resolved.exclude.len);
+    try std.testing.expectEqualStrings("users", resolved.include[0]);
+    try std.testing.expectEqualStrings("groups", resolved.include[1]);
+    try std.testing.expectEqualStrings("logs", resolved.exclude[0]);
+}
+
+test "resolveIncludeExcludeStrict supports all keyword" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    try parsed.put("include", .{ .string = "all,users" });
+    try parsed.put("exclude", .{ .string = "logs" });
+
+    var resolved = try resolveIncludeExcludeStrict(allocator, &parsed, .{
+        .choices = &[_][]const u8{ "users", "groups", "logs" },
+        .all_keyword = "all",
+    });
+    defer resolved.deinit();
+
+    try std.testing.expect(resolved.all);
+    try std.testing.expectEqual(@as(usize, 0), resolved.include.len);
+    try std.testing.expectEqual(@as(usize, 1), resolved.exclude.len);
+    try std.testing.expectEqualStrings("logs", resolved.exclude[0]);
+}
+
+test "resolveIncludeExcludeStrict reports conflicts" {
+    const allocator = std.testing.allocator;
+
+    var parsed = ParseResult.init(allocator);
+    defer parsed.deinit();
+
+    try parsed.put("include", .{ .string = "users" });
+    try parsed.put("exclude", .{ .string = "users" });
+
+    try std.testing.expectError(
+        error.IncludeExcludeConflict,
+        resolveIncludeExcludeStrict(allocator, &parsed, .{}),
+    );
 }
 
 test "ArgumentParser fromEnvOrDefault" {

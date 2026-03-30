@@ -18,6 +18,7 @@ pub const Config = struct {
     allow_short_clusters: bool = true,
     allow_inline_values: bool = true,
     allow_interspersed: bool = true,
+    allow_negated_flags: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
     silent_errors: bool = false, // Suppress error/warning prints (useful for tests)

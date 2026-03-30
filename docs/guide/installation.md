@@ -19,10 +19,10 @@ head:
 
 ### Release Installation (Recommended)
 
-To install the latest stable release (v0.0.2), verify the hash and add it to your `build.zig.zon` by running:
+To install the latest stable release (v0.0.4), verify the hash and add it to your `build.zig.zon` by running:
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
 ```
 
 This command will automatically download the package and update your `build.zig.zon` with the correct url and hash.

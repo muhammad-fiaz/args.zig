@@ -165,23 +165,47 @@ pub fn editDistance(a: []const u8, b: []const u8) usize {
     // Use smaller array for space efficiency
     if (a.len > b.len) return editDistance(b, a);
 
-    var prev_row: [256]usize = undefined;
-    var curr_row: [256]usize = undefined;
+    if (b.len + 1 <= 256) {
+        var prev_row: [256]usize = undefined;
+        var curr_row: [256]usize = undefined;
+        const width = b.len + 1;
 
-    const width = @min(b.len + 1, 256);
+        for (0..width) |i| prev_row[i] = i;
 
-    for (0..width) |i| prev_row[i] = i;
+        for (a, 0..) |c1, i| {
+            curr_row[0] = i + 1;
+            for (b, 0..) |c2, j| {
+                const cost: usize = if (c1 == c2) 0 else 1;
+                curr_row[j + 1] = @min(
+                    @min(prev_row[j + 1] + 1, curr_row[j] + 1),
+                    prev_row[j] + cost,
+                );
+            }
+            @memcpy(prev_row[0..width], curr_row[0..width]);
+        }
+
+        return prev_row[b.len];
+    }
+
+    // Fallback path for long strings keeps behavior correct without fixed-size limits.
+    const allocator = std.heap.page_allocator;
+    var prev_row = allocator.alloc(usize, b.len + 1) catch return @max(a.len, b.len);
+    defer allocator.free(prev_row);
+    var curr_row = allocator.alloc(usize, b.len + 1) catch return @max(a.len, b.len);
+    defer allocator.free(curr_row);
+
+    for (0..b.len + 1) |i| prev_row[i] = i;
 
     for (a, 0..) |c1, i| {
         curr_row[0] = i + 1;
-        for (b[0 .. width - 1], 0..) |c2, j| {
+        for (b, 0..) |c2, j| {
             const cost: usize = if (c1 == c2) 0 else 1;
             curr_row[j + 1] = @min(
                 @min(prev_row[j + 1] + 1, curr_row[j] + 1),
                 prev_row[j] + cost,
             );
         }
-        @memcpy(prev_row[0..width], curr_row[0..width]);
+        std.mem.copyForwards(usize, prev_row, curr_row);
     }
 
     return prev_row[b.len];

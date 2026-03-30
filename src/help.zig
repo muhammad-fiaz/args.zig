@@ -34,6 +34,7 @@ pub fn generateHelp(allocator: std.mem.Allocator, spec: CommandSpec, use_colors:
 
     for (spec.args) |arg| {
         if (arg.positional) {
+            if (arg.hidden) continue;
             if (arg.required) {
                 try writer.print(" <{s}>", .{arg.name});
             } else {
@@ -200,6 +201,9 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
     if (cfg.show_env_vars) {
         if (arg.env_var) |e| try writer.print(" {s}[env: {s}]{s}", .{ dim, e, reset });
     }
+    if (cfg.allow_negated_flags and arg.long != null and (arg.action == .store_true or arg.action == .store_false)) {
+        try writer.print(" {s}[negate: --no-{s}]{s}", .{ dim, arg.long.?, reset });
+    }
     if (arg.deprecated) |dep| try writer.print(" {s}[DEPRECATED: {s}]{s}", .{ yellow, dep, reset });
     try writer.writeAll("\n");
 }
@@ -214,6 +218,7 @@ pub fn generateUsage(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u
 
     for (spec.args) |arg| {
         if (arg.positional) {
+            if (arg.hidden) continue;
             if (arg.required) {
                 try writer.print(" <{s}>", .{arg.name});
             } else {
