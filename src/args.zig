@@ -35,6 +35,8 @@ pub const Shell = completion.Shell;
 pub const ParseError = errors.ParseError;
 pub const ValidationError = errors.ValidationError;
 pub const SchemaError = errors.SchemaError;
+pub const ValidatorFn = validation.ValidatorFn;
+pub const Validators = validation.Validators;
 
 // Version information
 pub const VERSION = version_info.version;
@@ -42,6 +44,32 @@ pub const VERSION_MAJOR = version_info.version_major;
 pub const VERSION_MINOR = version_info.version_minor;
 pub const VERSION_PATCH = version_info.version_patch;
 pub const MINIMUM_ZIG_VERSION = version_info.minimum_zig_version;
+
+fn pickExtensionValidator(
+    comptime allowed_extensions: []const []const u8,
+    case_sensitive_extensions: bool,
+    must_exist: bool,
+    file_name_only: bool,
+) validation.ValidatorFn {
+    if (file_name_only) {
+        return if (case_sensitive_extensions)
+            validation.Validators.fileNameWithExtensions(allowed_extensions, true)
+        else
+            validation.Validators.fileNameWithExtensions(allowed_extensions, false);
+    }
+
+    if (must_exist) {
+        return if (case_sensitive_extensions)
+            validation.Validators.existingFileWithExtension(allowed_extensions, true)
+        else
+            validation.Validators.existingFileWithExtension(allowed_extensions, false);
+    }
+
+    return if (case_sensitive_extensions)
+        validation.Validators.extension(allowed_extensions, true)
+    else
+        validation.Validators.extension(allowed_extensions, false);
+}
 
 /// Main argument parser structure providing a fluent API.
 pub const ArgumentParser = struct {
@@ -200,6 +228,231 @@ pub const ArgumentParser = struct {
             .hidden = options.hidden,
             .deprecated = options.deprecated,
             .validator = options.validator,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a path option (`ValueType.path`) for files or directories.
+    pub fn addPathOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = "PATH",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        try self.addOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .value_type = .path,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = options.validator,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a file path option with optional file-existence validation.
+    pub fn addFileOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        must_exist: bool = false,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        const validator_fn: ?validation.ValidatorFn = if (options.must_exist)
+            validation.Validators.fileExists
+        else
+            null;
+
+        try self.addPathOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .metavar = "FILE",
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = validator_fn,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a directory path option with optional directory-existence validation.
+    pub fn addDirectoryOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        must_exist: bool = false,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        const validator_fn: ?validation.ValidatorFn = if (options.must_exist)
+            validation.Validators.directoryExists
+        else
+            null;
+
+        try self.addPathOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .metavar = "DIR",
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = validator_fn,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a file path option with reusable extension validation.
+    pub fn addFileOptionWithExtensions(
+        self: *ArgumentParser,
+        name: []const u8,
+        comptime allowed_extensions: []const []const u8,
+        options: struct {
+            short: ?u8 = null,
+            help: ?[]const u8 = null,
+            default: ?[]const u8 = null,
+            required: bool = false,
+            dest: ?[]const u8 = null,
+            env_var: ?[]const u8 = null,
+            hidden: bool = false,
+            aliases: []const []const u8 = &.{},
+            deprecated: ?[]const u8 = null,
+            must_exist: bool = false,
+            case_sensitive_extensions: bool = false,
+            expect: []const []const u8 = &.{},
+        },
+    ) !void {
+        const validator_fn = pickExtensionValidator(
+            allowed_extensions,
+            options.case_sensitive_extensions,
+            options.must_exist,
+            false,
+        );
+
+        try self.addPathOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .metavar = "FILE",
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = validator_fn,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a file-name option (name only, no path separators) with built-in validation.
+    pub fn addFileNameOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
+        enforce_safe_name: bool = true,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        const validator_fn: ?validation.ValidatorFn = if (options.validator) |v|
+            v
+        else if (options.enforce_safe_name)
+            validation.Validators.fileNameSafe
+        else
+            null;
+
+        try self.addOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .value_type = .string,
+            .default = options.default,
+            .required = options.required,
+            .metavar = "FILE_NAME",
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = validator_fn,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a file-name option with extension restrictions.
+    pub fn addFileNameOptionWithExtensions(
+        self: *ArgumentParser,
+        name: []const u8,
+        comptime allowed_extensions: []const []const u8,
+        options: struct {
+            short: ?u8 = null,
+            help: ?[]const u8 = null,
+            default: ?[]const u8 = null,
+            required: bool = false,
+            dest: ?[]const u8 = null,
+            env_var: ?[]const u8 = null,
+            hidden: bool = false,
+            aliases: []const []const u8 = &.{},
+            deprecated: ?[]const u8 = null,
+            case_sensitive_extensions: bool = false,
+            expect: []const []const u8 = &.{},
+        },
+    ) !void {
+        const validator_fn = pickExtensionValidator(
+            allowed_extensions,
+            options.case_sensitive_extensions,
+            false,
+            true,
+        );
+
+        try self.addFileNameOption(name, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .validator = validator_fn,
             .expect = options.expect,
         });
     }
@@ -1604,6 +1857,109 @@ test "ArgumentParser addPositional choices and hidden" {
     const usage = try ap.getUsage();
     defer allocator.free(usage);
     try std.testing.expect(std.mem.indexOf(u8, usage, "<internal>") == null);
+}
+
+test "ArgumentParser addFileOptionWithExtensions validates extension" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "files",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFileOptionWithExtensions("input", &[_][]const u8{ "json", "yaml" }, .{});
+
+    {
+        const argv = [_][]const u8{ "--input", "config.json" };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("config.json", result.getString("input").?);
+    }
+
+    {
+        const argv = [_][]const u8{ "--input", "config.txt" };
+        try std.testing.expectError(error.CustomValidationFailed, ap.parse(&argv));
+    }
+}
+
+test "ArgumentParser addFileOptionWithExtensions supports must_exist" {
+    const allocator = std.testing.allocator;
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "{}" });
+    const existing = try tmp.dir.realpathAlloc(allocator, "settings.json");
+    defer allocator.free(existing);
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "files",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFileOptionWithExtensions("input", &[_][]const u8{"json"}, .{ .must_exist = true });
+
+    {
+        const argv = [_][]const u8{ "--input", existing };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings(existing, result.getString("input").?);
+    }
+
+    {
+        const argv = [_][]const u8{ "--input", "missing.json" };
+        try std.testing.expectError(error.CustomValidationFailed, ap.parse(&argv));
+    }
+}
+
+test "ArgumentParser addFileNameOption validates safe names" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "files",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFileNameOption("name", .{});
+
+    {
+        const argv = [_][]const u8{ "--name", "report.json" };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("report.json", result.getString("name").?);
+    }
+
+    {
+        const argv = [_][]const u8{ "--name", "bad/name.json" };
+        try std.testing.expectError(error.CustomValidationFailed, ap.parse(&argv));
+    }
+}
+
+test "ArgumentParser addFileNameOptionWithExtensions validates extension" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "files",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFileNameOptionWithExtensions("name", &[_][]const u8{ "json", "yaml" }, .{});
+
+    {
+        const argv = [_][]const u8{ "--name", "config.yaml" };
+        var result = try ap.parse(&argv);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("config.yaml", result.getString("name").?);
+    }
+
+    {
+        const argv = [_][]const u8{ "--name", "config.txt" };
+        try std.testing.expectError(error.CustomValidationFailed, ap.parse(&argv));
+    }
 }
 
 test "ArgumentParser addDeprecated" {

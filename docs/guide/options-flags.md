@@ -184,6 +184,56 @@ Behavior summary:
 - Overlaps like `--include users --exclude users` return `error.IncludeExcludeConflict`.
 - `all_keyword` (default: `all`) enables full selection with selective exclusions.
 
+## File And Extension Support
+
+For file-driven CLI tools, use dedicated helpers:
+
+```zig
+try parser.addFileOptionWithExtensions("input", &[_][]const u8{ "json", "yaml", "toml" }, .{
+    .short = 'i',
+    .must_exist = false,
+});
+
+try parser.addDirectoryOption("workspace", .{
+    .short = 'w',
+    .must_exist = false,
+});
+```
+
+Available helpers:
+
+- `addPathOption` for generic path values.
+- `addFileOption` for file-oriented options.
+- `addDirectoryOption` for directory-oriented options.
+- `addFileOptionWithExtensions` for extension checks with reusable validator logic.
+- `addFileNameOption` for safe file-name-only values.
+- `addFileNameOptionWithExtensions` for file-name plus extension checks.
+
+Use a one-call policy validator for the common case:
+
+```zig
+const output_name_validator = args.Validators.filePolicy(&[_][]const u8{"json"}, false, 3, 64);
+
+try parser.addFileNameOption("output-name", .{
+    .short = 'o',
+    .validator = output_name_validator,
+});
+```
+
+For advanced cases, you can still compose validators:
+
+```zig
+const output_name_validator = args.Validators.all(&[_]args.ValidatorFn{
+    args.Validators.fileExt(&[_][]const u8{"json"}, false),
+    args.Validators.fileNameLength(3, 64),
+});
+
+try parser.addFileNameOption("output-name", .{
+    .short = 'o',
+    .validator = output_name_validator,
+});
+```
+
 ## Key-Value Pairs
 
 You can automatically parse `key=value` strings:

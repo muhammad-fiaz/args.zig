@@ -55,6 +55,7 @@ A production-grade, high-performance command-line argument parsing library for Z
 - [**Question Flow Selection**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#question-based-selection-flow) - Prompt users to choose select/all when flags are omitted
 - [**Include/Exclude Filters**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#includeexclude-filters) - Reusable `--include` and `--exclude` helpers for CMD workflows
 - [**Strict Filter Resolution**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#strict-includeexclude-resolution) - Canonicalize choices, dedupe values, and detect include/exclude conflicts
+- [**File & Extension Support**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#file-and-extension-support) - Reusable helpers for file paths, directories, and allowed extensions
 - [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage across all modules
 
 
@@ -292,6 +293,38 @@ var strict_filters = try args.resolveIncludeExcludeStrict(allocator, &parsed, .{
 defer strict_filters.deinit();
 ```
 
+### File And Extension Support
+
+Use dedicated helpers for path/file/directory workflows:
+
+```zig
+try parser.addFileOptionWithExtensions("input", &[_][]const u8{ "json", "yaml", "toml" }, .{
+    .short = 'i',
+    .must_exist = false,
+});
+
+try parser.addDirectoryOption("workspace", .{
+    .short = 'w',
+    .must_exist = false,
+});
+
+const output_name_validator = args.Validators.filePolicy(&[_][]const u8{"json"}, false, 3, 64);
+
+try parser.addFileNameOption("output-name", .{
+    .short = 'o',
+    .validator = output_name_validator,
+});
+```
+
+You can still compose validators manually when needed:
+
+```zig
+const custom_validator = args.Validators.all(&[_]args.ValidatorFn{
+    args.Validators.fileName,
+    args.Validators.fileNameLength(3, 64),
+});
+```
+
 ### Argument Groups
 
 ```zig
@@ -442,6 +475,7 @@ zig build run-select_all
 zig build run-question_flow
 zig build run-include_exclude
 zig build run-include_exclude_strict
+zig build run-file_support
 
 # Run benchmarks
 zig build bench

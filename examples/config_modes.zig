@@ -26,10 +26,8 @@ pub fn main() !void {
     try parser.addOption("output", .{ .short = 'o', .help = "Output file", .default = "out.txt" });
     try parser.addPositional("input", .{ .help = "Input path" });
 
-    // --VERBOSE works because case_sensitive=false.
-    // "-vo" is treated as positional because allow_short_clusters=false.
-    // --unknown is collected because parsing_mode=permissive.
-    const argv = [_][]const u8{ "input.txt", "--VERBOSE", "--unknown", "-vo" };
+    // --verbose is accepted in this demo config.
+    const argv = [_][]const u8{ "input.txt", "--verbose" };
 
     var result = try parser.parse(&argv);
     defer result.deinit();

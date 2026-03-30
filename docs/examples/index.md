@@ -314,6 +314,20 @@ Run it with:
 zig build run-include_exclude_strict
 ```
 
+## File Support Example
+
+`examples/file_support.zig` demonstrates path/file/directory helpers:
+
+- `addPathOption` for generic paths
+- `addFileOptionWithExtensions` for reusable extension validation
+- `addDirectoryOption` for directory-oriented options
+
+Run it with:
+
+```bash
+zig build run-file_support
+```
+
 ## Counters and Choices Example
 
 Using counters for verbosity and choices for validation:

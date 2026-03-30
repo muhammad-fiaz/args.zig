@@ -56,6 +56,72 @@ pub fn validatePathExists(path: []const u8) bool {
     return true;
 }
 
+/// Check if a path exists and is a regular file.
+pub fn validateFileExists(path: []const u8) bool {
+    const stat = std.fs.cwd().statFile(path) catch return false;
+    return stat.kind == .file;
+}
+
+/// Check if a path exists and is a directory.
+pub fn validateDirectoryExists(path: []const u8) bool {
+    const stat = std.fs.cwd().statFile(path) catch return false;
+    return stat.kind == .directory;
+}
+
+/// Returns the extension portion without the dot (e.g. "json" for "a/b/c.json").
+pub fn pathExtension(path: []const u8) ?[]const u8 {
+    const file_name = std.fs.path.basename(path);
+    const dot_index = std.mem.lastIndexOfScalar(u8, file_name, '.') orelse return null;
+    if (dot_index + 1 >= file_name.len) return null;
+    return file_name[dot_index + 1 ..];
+}
+
+/// Check if path has the given extension. `ext` may include or omit the leading dot.
+pub fn hasExtension(path: []const u8, ext: []const u8, case_sensitive: bool) bool {
+    const current = pathExtension(path) orelse return false;
+    const normalized_ext = if (ext.len > 0 and ext[0] == '.') ext[1..] else ext;
+
+    if (case_sensitive) return std.mem.eql(u8, current, normalized_ext);
+    return std.ascii.eqlIgnoreCase(current, normalized_ext);
+}
+
+/// Check if path has any extension from the allowed list.
+pub fn hasAnyExtension(path: []const u8, allowed: []const []const u8, case_sensitive: bool) bool {
+    for (allowed) |ext| {
+        if (hasExtension(path, ext, case_sensitive)) return true;
+    }
+    return false;
+}
+
+/// Validates that a value is a safe file name (not a path).
+pub fn validateFileName(file_name: []const u8) bool {
+    if (file_name.len == 0) return false;
+    if (std.mem.eql(u8, file_name, ".") or std.mem.eql(u8, file_name, "..")) return false;
+
+    // Disallow path separators and common invalid filename characters.
+    for (file_name) |c| {
+        if (c < 32) return false;
+        if (c == '/' or c == '\\') return false;
+        if (c == '<' or c == '>' or c == ':' or c == '"' or c == '|' or c == '?' or c == '*') return false;
+    }
+
+    // Windows compatibility: no trailing dot or space.
+    const last = file_name[file_name.len - 1];
+    if (last == '.' or last == ' ') return false;
+
+    return true;
+}
+
+fn ensureAllowedExtension(value: []const u8, allowed_extensions: []const []const u8, case_sensitive: bool) ValidationResult {
+    if (hasAnyExtension(value, allowed_extensions, case_sensitive)) return .{ .ok = {} };
+    return .{ .err = "file extension is not allowed" };
+}
+
+fn ensureLength(value: []const u8, min_len: ?usize, max_len: ?usize, msg: []const u8) ValidationResult {
+    if (!validateLength(value, min_len, max_len)) return .{ .err = msg };
+    return .{ .ok = {} };
+}
+
 /// Parse and validate an integer within a range.
 pub fn parseIntInRange(comptime T: type, value: []const u8, min: ?T, max: ?T) !T {
     const parsed = std.fmt.parseInt(T, value, 10) catch return error.InvalidValue;
@@ -110,6 +176,127 @@ pub const Validators = struct {
         }
         return .{ .ok = {} };
     }
+
+    pub fn pathExists(value: []const u8) ValidationResult {
+        return if (validatePathExists(value)) .{ .ok = {} } else .{ .err = "path does not exist" };
+    }
+
+    pub fn fileExists(value: []const u8) ValidationResult {
+        return if (validateFileExists(value)) .{ .ok = {} } else .{ .err = "file does not exist" };
+    }
+
+    pub fn directoryExists(value: []const u8) ValidationResult {
+        return if (validateDirectoryExists(value)) .{ .ok = {} } else .{ .err = "directory does not exist" };
+    }
+
+    pub fn fileNameSafe(value: []const u8) ValidationResult {
+        return if (validateFileName(value)) .{ .ok = {} } else .{ .err = "invalid file name" };
+    }
+
+    /// Creates a validator for file name length.
+    pub fn fileNameLength(comptime min_len: usize, comptime max_len: usize) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                return ensureLength(value, min_len, max_len, "file name length is out of range");
+            }
+        }.validate;
+    }
+
+    /// One-call filename policy validator for common CLI output/input file-name checks.
+    /// - Always enforces safe file-name rules (no path separators/invalid chars)
+    /// - Optionally enforces extension membership
+    /// - Optionally enforces min/max length
+    pub fn fileNamePolicy(
+        comptime allowed_extensions: []const []const u8,
+        comptime case_sensitive_extensions: bool,
+        comptime min_len: ?usize,
+        comptime max_len: ?usize,
+    ) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                if (!validateFileName(value)) return .{ .err = "invalid file name" };
+
+                if (allowed_extensions.len > 0) {
+                    const extension_result = ensureAllowedExtension(value, allowed_extensions, case_sensitive_extensions);
+                    if (!extension_result.isOk()) return extension_result;
+                }
+
+                const length_result = ensureLength(value, min_len, max_len, "file name length is out of range");
+                if (!length_result.isOk()) return length_result;
+
+                return .{ .ok = {} };
+            }
+        }.validate;
+    }
+
+    /// Creates a validator that checks file extension membership.
+    pub fn extension(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
+            }
+        }.validate;
+    }
+
+    /// Creates a validator that requires existing file with an allowed extension.
+    pub fn existingFileWithExtension(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                if (!validateFileExists(value)) return .{ .err = "file does not exist" };
+                return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
+            }
+        }.validate;
+    }
+
+    /// Creates a validator for safe file names that must use one of the allowed extensions.
+    pub fn fileNameWithExtensions(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                if (!validateFileName(value)) return .{ .err = "invalid file name" };
+                return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
+            }
+        }.validate;
+    }
+
+    /// Compose validators with logical AND semantics.
+    pub fn allOf(comptime validator_list: []const ValidatorFn) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                inline for (validator_list) |validator| {
+                    const res = validator(value);
+                    if (!res.isOk()) return res;
+                }
+                return .{ .ok = {} };
+            }
+        }.validate;
+    }
+
+    /// Compose validators with logical OR semantics.
+    pub fn anyOf(comptime validator_list: []const ValidatorFn) ValidatorFn {
+        return struct {
+            fn validate(value: []const u8) ValidationResult {
+                inline for (validator_list) |validator| {
+                    const res = validator(value);
+                    if (res.isOk()) return .{ .ok = {} };
+                }
+                return .{ .err = "value did not satisfy any validator" };
+            }
+        }.validate;
+    }
+
+    // Aliases for concise client-side usage.
+    pub fn all(comptime validator_list: []const ValidatorFn) ValidatorFn {
+        return allOf(validator_list);
+    }
+
+    pub fn any(comptime validator_list: []const ValidatorFn) ValidatorFn {
+        return anyOf(validator_list);
+    }
+
+    pub const fileName = fileNameSafe;
+    pub const ext = extension;
+    pub const fileExt = fileNameWithExtensions;
+    pub const filePolicy = fileNamePolicy;
 };
 
 test "parseValue string" {
@@ -197,4 +384,57 @@ test "Validators.nonEmpty" {
 test "Validators.alphanumeric" {
     try std.testing.expect(Validators.alphanumeric("Hello123").isOk());
     try std.testing.expect(!Validators.alphanumeric("Hello 123").isOk());
+}
+
+test "hasExtension and hasAnyExtension" {
+    try std.testing.expect(hasExtension("config.json", "json", true));
+    try std.testing.expect(hasExtension("config.JSON", "json", false));
+    try std.testing.expect(hasExtension("config.json", ".json", true));
+    try std.testing.expect(!hasExtension("config.json", "yaml", false));
+
+    const allowed = [_][]const u8{ "json", "yaml" };
+    try std.testing.expect(hasAnyExtension("config.yml", &allowed, false) == false);
+    try std.testing.expect(hasAnyExtension("config.yaml", &allowed, false));
+}
+
+test "validateFileName" {
+    try std.testing.expect(validateFileName("report.json"));
+    try std.testing.expect(validateFileName("build-config.toml"));
+    try std.testing.expect(!validateFileName(""));
+    try std.testing.expect(!validateFileName("../report.json"));
+    try std.testing.expect(!validateFileName("bad:name.json"));
+    try std.testing.expect(!validateFileName("name. "));
+}
+
+test "Validators.fileNameWithExtensions" {
+    const validator = Validators.fileNameWithExtensions(&[_][]const u8{ "json", "yaml" }, false);
+    try std.testing.expect(validator("config.json").isOk());
+    try std.testing.expect(validator("CONFIG.YAML").isOk());
+    try std.testing.expect(!validator("config.txt").isOk());
+    try std.testing.expect(!validator("path/config.json").isOk());
+}
+
+test "Validators.allOf and anyOf" {
+    const valid_name = Validators.allOf(&[_]ValidatorFn{
+        Validators.fileNameSafe,
+        Validators.fileNameLength(3, 32),
+    });
+    try std.testing.expect(valid_name("cfg.json").isOk());
+    try std.testing.expect(!valid_name("a").isOk());
+
+    const numeric_or_alnum = Validators.anyOf(&[_]ValidatorFn{
+        Validators.numeric,
+        Validators.alphanumeric,
+    });
+    try std.testing.expect(numeric_or_alnum("123").isOk());
+    try std.testing.expect(numeric_or_alnum("abc123").isOk());
+    try std.testing.expect(!numeric_or_alnum("abc-123").isOk());
+}
+
+test "Validators.fileNamePolicy" {
+    const validator = Validators.fileNamePolicy(&[_][]const u8{"json"}, false, 8, 64);
+    try std.testing.expect(validator("result.json").isOk());
+    try std.testing.expect(!validator("result.txt").isOk());
+    try std.testing.expect(!validator("ab.json").isOk());
+    try std.testing.expect(!validator("bad/name.json").isOk());
 }

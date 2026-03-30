@@ -214,6 +214,63 @@ Adds a conventional `--exclude` option for comma-separated filters.
 
 Adds both include/exclude options under one group for help organization.
 
+### `addPathOption`
+
+Adds a path option (`ValueType.path`) for generic path workflows.
+
+### `addFileOption`
+
+Adds a file path option with optional existence validation.
+
+### `addDirectoryOption`
+
+Adds a directory path option with optional existence validation.
+
+### `addFileOptionWithExtensions`
+
+```zig
+pub fn addFileOptionWithExtensions(
+    self: *ArgumentParser,
+    name: []const u8,
+    comptime allowed_extensions: []const []const u8,
+    options: struct { ... },
+) !void
+```
+
+Adds a file path option with reusable extension validation and optional existence checks.
+
+### `addFileNameOption`
+
+Adds a file-name-only option (safe name, no path separators) with optional custom validator.
+
+### `addFileNameOptionWithExtensions`
+
+```zig
+pub fn addFileNameOptionWithExtensions(
+    self: *ArgumentParser,
+    name: []const u8,
+    comptime allowed_extensions: []const []const u8,
+    options: struct { ... },
+) !void
+```
+
+Adds a file-name option constrained by allowed extensions.
+
+### Validator Aliases (Top-Level)
+
+`args.zig` re-exports validation helpers for concise client-side usage:
+
+```zig
+pub const ValidatorFn = validation.ValidatorFn;
+pub const Validators = validation.Validators;
+```
+
+This allows direct usage like:
+
+```zig
+const validator = args.Validators.filePolicy(&[_][]const u8{"json"}, false, 3, 64);
+```
+
 ### `PromptSelectOrAllOptions`
 
 ```zig

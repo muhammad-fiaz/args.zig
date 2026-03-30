@@ -245,6 +245,46 @@ pub const Parser = struct {
         return false;
     }
 
+    fn normalizeShortKey(self: *Parser, key: u8) u8 {
+        return if (self.cfg.case_sensitive) key else std.ascii.toLower(key);
+    }
+
+    fn appendUnknownAsRemaining(self: *Parser, result: *ParseResult, raw: []const u8) !void {
+        try result.remaining.append(self.allocator, try self.copyAndTrackSlice(result, raw));
+    }
+
+    fn printUnknownOptionAndMaybeExit(self: *Parser, name: []const u8, is_short: bool) void {
+        if (!self.cfg.exit_on_error) return;
+
+        const prefix = if (is_short) "-" else "--";
+        std.debug.print("Error: Unknown option '{s}{s}'\n", .{ prefix, name });
+
+        if (!is_short) {
+            var candidates: std.ArrayListUnmanaged([]const u8) = .empty;
+            defer candidates.deinit(self.allocator);
+            var it = self.long_map.keyIterator();
+            while (it.next()) |k| candidates.append(self.allocator, k.*) catch break;
+
+            if (utils.findClosest(name, candidates.items, 3)) |sug| {
+                std.debug.print("\n\tDid you mean '--{s}'?\n", .{sug});
+            }
+        }
+
+        std.process.exit(1);
+    }
+
+    fn handleUnknownOption(self: *Parser, result: *ParseResult, raw: []const u8, name: []const u8, is_short: bool) !void {
+        if (self.cfg.parsing_mode == .ignore_unknown) return;
+
+        if (self.cfg.parsing_mode == .permissive) {
+            try self.appendUnknownAsRemaining(result, raw);
+            return;
+        }
+
+        self.printUnknownOptionAndMaybeExit(name, is_short);
+        return errors.ParseError.UnknownOption;
+    }
+
     fn validateGroups(self: *Parser, result: *ParseResult) !void {
         for (self.spec.groups) |group| {
             var found_count: usize = 0;
@@ -271,7 +311,7 @@ pub const Parser = struct {
         }
 
         const arg_spec = if (is_short)
-            self.short_map.get(if (self.cfg.case_sensitive) name[0] else std.ascii.toLower(name[0]))
+            self.short_map.get(self.normalizeShortKey(name[0]))
         else
             self.getLongArgSpec(name);
 
@@ -308,30 +348,7 @@ pub const Parser = struct {
                 }
             }
 
-            if (self.cfg.parsing_mode == .ignore_unknown) return;
-
-            if (self.cfg.parsing_mode == .permissive) {
-                try result.remaining.append(self.allocator, try self.copyAndTrackSlice(result, tok.raw));
-                return;
-            }
-
-            if (self.cfg.exit_on_error) {
-                const prefix = if (is_short) "-" else "--";
-                std.debug.print("Error: Unknown option '{s}{s}'\n", .{ prefix, name });
-
-                if (!is_short) {
-                    var candidates: std.ArrayListUnmanaged([]const u8) = .empty;
-                    defer candidates.deinit(self.allocator);
-                    var it = self.long_map.keyIterator();
-                    while (it.next()) |k| try candidates.append(self.allocator, k.*);
-
-                    if (utils.findClosest(name, candidates.items, 3)) |sug| {
-                        std.debug.print("\n\tDid you mean '--{s}'?\n", .{sug});
-                    }
-                }
-                std.process.exit(1);
-            }
-            return errors.ParseError.UnknownOption;
+            return self.handleUnknownOption(result, tok.raw, name, is_short);
         }
 
         const spec = arg_spec.?;
@@ -444,37 +461,14 @@ pub const Parser = struct {
         }
 
         const arg_spec = self.getLongArgSpec(name) orelse
-            if (name.len == 1) self.short_map.get(if (self.cfg.case_sensitive) name[0] else std.ascii.toLower(name[0])) else null;
+            if (name.len == 1) self.short_map.get(self.normalizeShortKey(name[0])) else null;
 
         if (arg_spec == null) {
             if (self.getNegatedLongSpec(name) != null) {
                 return errors.ParseError.InvalidFormat;
             }
 
-            if (self.cfg.parsing_mode == .ignore_unknown) return;
-
-            if (self.cfg.parsing_mode == .permissive) {
-                try result.remaining.append(self.allocator, try self.copyAndTrackSlice(result, tok.raw));
-                return;
-            }
-
-            if (self.cfg.exit_on_error) {
-                const prefix = if (name.len == 1) "-" else "--";
-                std.debug.print("Error: Unknown option '{s}{s}'\n", .{ prefix, name });
-
-                if (name.len > 1) {
-                    var candidates: std.ArrayListUnmanaged([]const u8) = .empty;
-                    defer candidates.deinit(self.allocator);
-                    var it = self.long_map.keyIterator();
-                    while (it.next()) |k| try candidates.append(self.allocator, k.*);
-
-                    if (utils.findClosest(name, candidates.items, 3)) |sug| {
-                        std.debug.print("\n\tDid you mean '--{s}'?\n", .{sug});
-                    }
-                }
-                std.process.exit(1);
-            }
-            return errors.ParseError.UnknownOption;
+            return self.handleUnknownOption(result, tok.raw, name, name.len == 1);
         }
 
         const spec = arg_spec.?;

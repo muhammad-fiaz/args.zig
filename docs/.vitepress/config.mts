@@ -14,7 +14,7 @@ export const GTM_ID = "GTM-P4M9T8ZR";
 export const ADSENSE_CLIENT_ID = "ca-pub-2040560600290490";
 
 // SEO Keywords
-export const KEYWORDS = "zig, argument parser, cli, command line, argparse, negated flags, boolean flags, select all, interactive prompt, question flow, include exclude, strict filters, shell completions, bash completion, zsh completion, fish completion, powershell completion, environment variables, subcommands, zig library, cli parsing";
+export const KEYWORDS = "zig, argument parser, cli, command line, argparse, negated flags, boolean flags, select all, interactive prompt, question flow, include exclude, strict filters, file path parsing, file extension validation, shell completions, bash completion, zsh completion, fish completion, powershell completion, environment variables, subcommands, zig library, cli parsing";
 
 export default defineConfig({
   lang: "en-US",
