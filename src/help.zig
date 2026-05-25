@@ -17,9 +17,9 @@ pub fn generateHelp(allocator: std.mem.Allocator, spec: CommandSpec, use_colors:
 
 /// Generate help text for a command specification using an explicit config.
 pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, use_colors: bool, cfg: config.Config) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     const reset = Color.get(Color.reset, use_colors);
     const bold = Color.get(Color.bold, use_colors);
@@ -58,7 +58,7 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
             if (sub.hidden) continue;
             try writer.print("    {s}{s}{s}", .{ green, sub.name, reset });
             const padding = if (sub.name.len < 20) 20 - sub.name.len else 2;
-            try writer.writeByteNTimes(' ', padding);
+            for (0..padding) |_| try writer.writeByte(' ');
             if (sub.help) |h| try writer.print("{s}", .{h});
             try writer.writeAll("\n");
         }
@@ -79,7 +79,7 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
             if (!arg.positional or arg.hidden) continue;
             try writer.print("    {s}<{s}>{s}", .{ cyan, arg.name, reset });
             const padding = if (arg.name.len + 2 < 20) 20 - arg.name.len - 2 else 2;
-            try writer.writeByteNTimes(' ', padding);
+            for (0..padding) |_| try writer.writeByte(' ');
             if (arg.help) |h| try writer.print("{s}", .{h});
             if (arg.required) try writer.print(" {s}[required]{s}", .{ dim, reset });
             try writer.writeAll("\n");
@@ -147,13 +147,13 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
 
         if (spec.add_help) {
             try writer.print("    {s}-h{s}, {s}--help{s}", .{ green, reset, green, reset });
-            try writer.writeByteNTimes(' ', 12);
+            for (0..12) |_| try writer.writeByte(' ');
             try writer.print("Print help\n", .{});
         }
 
         if (spec.add_version and spec.version != null) {
             try writer.print("    {s}-V{s}, {s}--version{s}", .{ green, reset, green, reset });
-            try writer.writeByteNTimes(' ', 9);
+            for (0..9) |_| try writer.writeByte(' ');
             try writer.print("Print version\n", .{});
         }
     }
@@ -164,7 +164,7 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
 
     if (spec.epilog) |epilog| try writer.print("\n{s}\n", .{epilog});
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bool) !void {
@@ -192,13 +192,13 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
     }
     const indent_width = if (cfg.help_indent >= 4) cfg.help_indent else 4;
     const padding = if (opt_len < indent_width) indent_width - opt_len else 2;
-    try writer.writeByteNTimes(' ', padding);
+    for (0..padding) |_| try writer.writeByte(' ');
 
     var current_col = 4 + opt_len + padding;
     if (arg.help) |h| {
         if (cfg.help_line_width > 0 and current_col + h.len > cfg.help_line_width and cfg.help_indent > 0) {
             try writer.writeAll("\n");
-            try writer.writeByteNTimes(' ', cfg.help_indent);
+            for (0..cfg.help_indent) |_| try writer.writeByte(' ');
             current_col = cfg.help_indent;
         }
         try writer.writeAll(h);
@@ -223,7 +223,7 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
             const meta_len = 11 + d.len;
             if (cfg.help_line_width > 0 and current_col + meta_len > cfg.help_line_width and cfg.help_indent > 0) {
                 try writer.writeAll("\n");
-                try writer.writeByteNTimes(' ', cfg.help_indent);
+                for (0..cfg.help_indent) |_| try writer.writeByte(' ');
                 current_col = cfg.help_indent;
             }
             try writer.print(" {s}[default: {s}]{s}", .{ dim, d, reset });
@@ -235,7 +235,7 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
             const meta_len = 7 + e.len;
             if (cfg.help_line_width > 0 and current_col + meta_len > cfg.help_line_width and cfg.help_indent > 0) {
                 try writer.writeAll("\n");
-                try writer.writeByteNTimes(' ', cfg.help_indent);
+                for (0..cfg.help_indent) |_| try writer.writeByte(' ');
                 current_col = cfg.help_indent;
             }
             try writer.print(" {s}[env: {s}]{s}", .{ dim, e, reset });
@@ -247,7 +247,7 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
         const meta_len = 14 + negate.len;
         if (cfg.help_line_width > 0 and current_col + meta_len > cfg.help_line_width and cfg.help_indent > 0) {
             try writer.writeAll("\n");
-            try writer.writeByteNTimes(' ', cfg.help_indent);
+            for (0..cfg.help_indent) |_| try writer.writeByte(' ');
             current_col = cfg.help_indent;
         }
         try writer.print(" {s}[negate: --no-{s}]{s}", .{ dim, negate, reset });
@@ -257,7 +257,7 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
         const meta_len = 14 + dep.len;
         if (cfg.help_line_width > 0 and current_col + meta_len > cfg.help_line_width and cfg.help_indent > 0) {
             try writer.writeAll("\n");
-            try writer.writeByteNTimes(' ', cfg.help_indent);
+            for (0..cfg.help_indent) |_| try writer.writeByte(' ');
         }
         try writer.print(" {s}[DEPRECATED: {s}]{s}", .{ yellow, dep, reset });
     }
@@ -266,9 +266,9 @@ fn printOption(writer: anytype, arg: ArgSpec, cfg: config.Config, use_colors: bo
 
 /// Generate a short usage line.
 pub fn generateUsage(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("Usage: {s}", .{spec.name});
 
@@ -286,7 +286,7 @@ pub fn generateUsage(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u
     if (spec.args.len > 0) try writer.writeAll(" [OPTIONS]");
     if (spec.subcommands.len > 0) try writer.writeAll(" <COMMAND>");
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 pub fn generateVersion(spec: CommandSpec) []const u8 {
@@ -295,6 +295,8 @@ pub fn generateVersion(spec: CommandSpec) []const u8 {
 
 test "generateHelp basic" {
     const allocator = std.testing.allocator;
+    config.initConfig(config.Config.default());
+    defer config.resetConfig();
 
     const spec = CommandSpec{
         .name = "myapp",
@@ -315,6 +317,8 @@ test "generateHelp basic" {
 
 test "generateUsage" {
     const allocator = std.testing.allocator;
+    config.initConfig(config.Config.default());
+    defer config.resetConfig();
 
     const spec = CommandSpec{
         .name = "test",

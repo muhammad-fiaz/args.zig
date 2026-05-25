@@ -4,11 +4,9 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // Setup allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.heap.c_allocator;
 
     // Create argument parser with custom config
     var parser = try args.ArgumentParser.init(allocator, .{
@@ -137,7 +135,7 @@ pub fn main() !void {
     });
 
     // Parse arguments
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     // Get global options

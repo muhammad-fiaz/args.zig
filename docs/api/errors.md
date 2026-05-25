@@ -202,10 +202,8 @@ var parser = try args.ArgumentParser.init(allocator, .{
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
@@ -215,7 +213,7 @@ pub fn main() !void {
 
     try parser.addOption("output", .{ .short = 'o', .required = true });
 
-    var result = parser.parseProcess() catch |err| {
+    var result = parser.parseProcess(init) catch |err| {
         const msg = args.errors.formatParseError(err);
         std.debug.print("Error: {s}\n\n", .{msg});
         try parser.printHelp();

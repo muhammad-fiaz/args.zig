@@ -1,6 +1,7 @@
 //! Configuration management for args.zig.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const types = @import("types.zig");
 
 /// Global configuration for the argument parser.
@@ -65,39 +66,41 @@ pub const Config = struct {
     }
 };
 
+const config_io: std.Io = if (builtin.is_test) std.testing.io else std.Io.failing;
+
 var global_config: Config = .{};
-var config_mutex = std.Thread.Mutex{};
+var config_mutex = std.Io.Mutex.init;
 var config_initialized = false;
 
 pub fn initConfig(cfg: Config) void {
-    config_mutex.lock();
-    defer config_mutex.unlock();
+    config_mutex.lockUncancelable(config_io);
+    defer config_mutex.unlock(config_io);
     global_config = cfg;
     config_initialized = true;
 }
 
 pub fn getConfig() Config {
-    config_mutex.lock();
-    defer config_mutex.unlock();
+    config_mutex.lockUncancelable(config_io);
+    defer config_mutex.unlock(config_io);
     return global_config;
 }
 
 pub fn resetConfig() void {
-    config_mutex.lock();
-    defer config_mutex.unlock();
+    config_mutex.lockUncancelable(config_io);
+    defer config_mutex.unlock(config_io);
     global_config = .{};
     config_initialized = false;
 }
 
 pub fn setConfigValue(comptime field: []const u8, value: anytype) void {
-    config_mutex.lock();
-    defer config_mutex.unlock();
+    config_mutex.lockUncancelable(config_io);
+    defer config_mutex.unlock(config_io);
     @field(global_config, field) = value;
 }
 
 pub fn isInitialized() bool {
-    config_mutex.lock();
-    defer config_mutex.unlock();
+    config_mutex.lockUncancelable(config_io);
+    defer config_mutex.unlock(config_io);
     return config_initialized;
 }
 

@@ -3,6 +3,7 @@
 const std = @import("std");
 const schema = @import("schema.zig");
 const utils = @import("utils.zig");
+const config_mod = @import("config.zig");
 
 pub const CommandSpec = schema.CommandSpec;
 pub const ArgSpec = schema.ArgSpec;
@@ -37,9 +38,9 @@ pub fn generateCompletion(allocator: std.mem.Allocator, spec: CommandSpec, shell
 }
 
 fn generateBashCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("# Bash completion for {s}\n_{s}_completions() {{\n", .{ spec.name, spec.name });
     try writer.writeAll("    local cur=\"${COMP_WORDS[COMP_CWORD]}\"\n    local opts=\"");
@@ -71,13 +72,13 @@ fn generateBashCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]co
     }
     try writer.print("    fi\n}}\ncomplete -F _{s}_completions {s}\n", .{ spec.name, spec.name });
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 fn generateZshCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("#compdef {s}\n_{s}() {{\n    local -a opts args\n    opts=(\n", .{ spec.name, spec.name });
 
@@ -94,13 +95,13 @@ fn generateZshCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]con
     if (spec.version != null) try writer.writeAll("        '--version[Print version]'\n");
     try writer.print("    )\n    _arguments -s $opts\n}}\n_{s} \"$@\"\n", .{spec.name});
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 fn generateFishCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("# Fish completion for {s}\n\n", .{spec.name});
 
@@ -123,13 +124,13 @@ fn generateFishCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]co
         try writer.writeAll("\n");
     }
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 fn generatePowershellCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("# PowerShell completion for {s}\nRegister-ArgumentCompleter -Native -CommandName {s} -ScriptBlock {{\n", .{ spec.name, spec.name });
     try writer.writeAll("    param($wordToComplete, $commandAst, $cursorPosition)\n    $completions = @(\n");
@@ -148,13 +149,13 @@ fn generatePowershellCompletion(allocator: std.mem.Allocator, spec: CommandSpec)
 
     try writer.writeAll("    )\n    $completions | Where-Object { $_.CompletionText -like \"$wordToComplete*\" }\n}\n");
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 fn generateNushellCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u8 {
-    var result: std.ArrayList(u8) = .empty;
-    errdefer result.deinit(allocator);
-    const writer = result.writer(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
+    errdefer aw.deinit();
+    const writer = &aw.writer;
 
     try writer.print("# Nushell completion for {s}\n\n", .{spec.name});
     try writer.print("extern \"{s}\" [\n", .{spec.name});
@@ -189,7 +190,7 @@ fn generateNushellCompletion(allocator: std.mem.Allocator, spec: CommandSpec) ![
 
     try writer.writeAll("]\n");
 
-    return result.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 test "Shell.fromString" {
@@ -204,6 +205,9 @@ test "Shell.fromString" {
 
 test "generateBashCompletion" {
     const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .allow_negated_flags = true, .silent_errors = true });
+    defer config_mod.resetConfig();
+
     const spec = CommandSpec{
         .name = "myapp",
         .args = &[_]ArgSpec{.{ .name = "verbose", .short = 'v', .long = "verbose", .action = .store_true }},
@@ -218,6 +222,9 @@ test "generateBashCompletion" {
 
 test "generateFishCompletion" {
     const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .allow_negated_flags = true, .silent_errors = true });
+    defer config_mod.resetConfig();
+
     const spec = CommandSpec{
         .name = "test",
         .args = &[_]ArgSpec{.{ .name = "output", .short = 'o', .long = "output", .help = "Output file" }},

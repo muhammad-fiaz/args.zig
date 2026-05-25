@@ -11,6 +11,16 @@ head:
 
 ## Latest Release Notes
 
+### v0.0.5
+
+- Minimum Zig version updated to **0.16.0**.
+- Updated all APIs to use Zig 0.16's `std.process.Init` pattern: `parseProcess(init)`, `main(init: std.process.Init)`.
+- `resolveSelectOrAllWithPrompt` and `resolveSelectOrAllWithPromptIO` no longer take an allocator parameter.
+- `resolveSelectOrAllWithPrompt` now accepts `io: std.Io` instead of creating an IO context inline.
+- `resolveSelectOrAllWithPromptIO` takes `*std.Io.Reader` and `*std.Io.Writer` instead of `anytype`.
+- All examples updated to use `std.heap.c_allocator` and Zig 0.16 idioms.
+- Full shell completion support including Nushell.
+
 ### v0.0.4
 
 - Fixed a Windows parsing lifetime bug where values returned from `parseProcess()` could reference freed argument buffers.
@@ -41,15 +51,19 @@ You might want to disable the update checker if:
 The simplest way to disable update checking globally:
 
 ```zig
+const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
     // Disable before creating any parsers
     args.disableUpdateCheck();
     
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
     });
+    defer parser.deinit();
     // ...
 }
 ```
@@ -106,10 +120,12 @@ The check is:
 ## Example: Conditional Update Checking
 
 ```zig
-const args = @import("args");
 const std = @import("std");
+const args = @import("args");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
     // Check environment variable to decide
     const disable_updates = std.process.getEnvVarOwned(
         allocator, 

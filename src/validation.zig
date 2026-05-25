@@ -81,8 +81,8 @@ pub fn validateLength(value: []const u8, min_len: ?usize, max_len: ?usize) bool 
 }
 
 /// Check if a path exists on the filesystem.
-pub fn validatePathExists(path: []const u8) bool {
-    std.fs.cwd().access(path, .{}) catch return false;
+pub fn validatePathExists(io: std.Io, path: []const u8) bool {
+    std.Io.Dir.cwd().access(io, path, .{}) catch return false;
     return true;
 }
 
@@ -92,14 +92,14 @@ pub fn validateAbsolutePath(path: []const u8) bool {
 }
 
 /// Check if a path exists and is a regular file.
-pub fn validateFileExists(path: []const u8) bool {
-    const stat = std.fs.cwd().statFile(path) catch return false;
+pub fn validateFileExists(io: std.Io, path: []const u8) bool {
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return false;
     return stat.kind == .file;
 }
 
 /// Check if a path exists and is a directory.
-pub fn validateDirectoryExists(path: []const u8) bool {
-    const stat = std.fs.cwd().statFile(path) catch return false;
+pub fn validateDirectoryExists(io: std.Io, path: []const u8) bool {
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return false;
     return stat.kind == .directory;
 }
 
@@ -454,91 +454,110 @@ pub const ValidationResult = union(enum) {
 };
 
 /// Generic validator function type.
-pub const ValidatorFn = *const fn ([]const u8) ValidationResult;
+pub const ValidatorFn = *const fn (std.Io, []const u8) ValidationResult;
 
 /// Default validators for common patterns.
 pub const Validators = struct {
-    pub fn nonEmpty(value: []const u8) ValidationResult {
+    pub fn nonEmpty(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (value.len > 0) .{ .ok = {} } else .{ .err = "value cannot be empty" };
     }
 
-    pub fn alphanumeric(value: []const u8) ValidationResult {
+    pub fn alphanumeric(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         for (value) |c| {
             if (!std.ascii.isAlphanumeric(c)) return .{ .err = "value must be alphanumeric" };
         }
         return .{ .ok = {} };
     }
 
-    pub fn numeric(value: []const u8) ValidationResult {
+    pub fn numeric(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         for (value) |c| {
             if (!std.ascii.isDigit(c)) return .{ .err = "value must be numeric" };
         }
         return .{ .ok = {} };
     }
 
-    pub fn emailAddress(value: []const u8) ValidationResult {
+    pub fn emailAddress(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateEmailAddress(value)) .{ .ok = {} } else .{ .err = "invalid email address" };
     }
 
-    pub fn httpUrl(value: []const u8) ValidationResult {
+    pub fn httpUrl(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateHttpUrl(value)) .{ .ok = {} } else .{ .err = "invalid URL (expected http/https)" };
     }
 
-    pub fn ipv4(value: []const u8) ValidationResult {
+    pub fn ipv4(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateIPv4Address(value)) .{ .ok = {} } else .{ .err = "invalid IPv4 address" };
     }
 
-    pub fn ipv6(value: []const u8) ValidationResult {
+    pub fn ipv6(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateIPv6Address(value)) .{ .ok = {} } else .{ .err = "invalid IPv6 address" };
     }
 
-    pub fn ipAny(value: []const u8) ValidationResult {
+    pub fn ipAny(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateIPv4Address(value) or validateIPv6Address(value)) .{ .ok = {} } else .{ .err = "invalid IP address" };
     }
 
-    pub fn uuid(value: []const u8) ValidationResult {
+    pub fn uuid(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateUuid(value)) .{ .ok = {} } else .{ .err = "invalid UUID" };
     }
 
-    pub fn isoDate(value: []const u8) ValidationResult {
+    pub fn isoDate(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateIsoDate(value)) .{ .ok = {} } else .{ .err = "invalid date (expected YYYY-MM-DD)" };
     }
 
-    pub fn isoDateTime(value: []const u8) ValidationResult {
+    pub fn isoDateTime(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateIsoDateTime(value)) .{ .ok = {} } else .{ .err = "invalid date-time (expected YYYY-MM-DDTHH:MM:SS[Z])" };
     }
 
-    pub fn json(value: []const u8) ValidationResult {
+    pub fn json(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateJsonValue(value)) .{ .ok = {} } else .{ .err = "invalid JSON" };
     }
 
-    pub fn year(value: []const u8) ValidationResult {
+    pub fn year(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateYear(value)) .{ .ok = {} } else .{ .err = "invalid year (expected YYYY)" };
     }
 
-    pub fn time(value: []const u8) ValidationResult {
+    pub fn time(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateTime24(value)) .{ .ok = {} } else .{ .err = "invalid time (expected HH:MM or HH:MM:SS)" };
     }
 
-    pub fn hostname(value: []const u8) ValidationResult {
+    pub fn hostname(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateHostName(value)) .{ .ok = {} } else .{ .err = "invalid hostname" };
     }
 
-    pub fn port(value: []const u8) ValidationResult {
+    pub fn port(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validatePort(value)) .{ .ok = {} } else .{ .err = "invalid port (expected 1..65535)" };
     }
 
-    pub fn endpoint(value: []const u8) ValidationResult {
+    pub fn endpoint(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateEndpoint(value)) .{ .ok = {} } else .{ .err = "invalid endpoint (expected host:port)" };
     }
 
-    pub fn keyValuePair(value: []const u8) ValidationResult {
+    pub fn keyValuePair(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateKeyValuePair(value)) .{ .ok = {} } else .{ .err = "invalid key=value pair" };
     }
 
     pub fn intRange(comptime min: ?i64, comptime max: ?i64) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 _ = parseIntInRange(i64, value, min, max) catch |err| {
                     return switch (err) {
                         error.InvalidValue => .{ .err = "invalid integer" },
@@ -552,7 +571,8 @@ pub const Validators = struct {
 
     pub fn floatRange(comptime min: ?f64, comptime max: ?f64) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 _ = parseFloatInRange(value, min, max) catch |err| {
                     return switch (err) {
                         error.InvalidValue => .{ .err = "invalid float" },
@@ -564,30 +584,33 @@ pub const Validators = struct {
         }.validate;
     }
 
-    pub fn pathExists(value: []const u8) ValidationResult {
-        return if (validatePathExists(value)) .{ .ok = {} } else .{ .err = "path does not exist" };
+    pub fn pathExists(io: std.Io, value: []const u8) ValidationResult {
+        return if (validatePathExists(io, value)) .{ .ok = {} } else .{ .err = "path does not exist" };
     }
 
-    pub fn absolutePath(value: []const u8) ValidationResult {
+    pub fn absolutePath(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateAbsolutePath(value)) .{ .ok = {} } else .{ .err = "path must be absolute" };
     }
 
-    pub fn fileExists(value: []const u8) ValidationResult {
-        return if (validateFileExists(value)) .{ .ok = {} } else .{ .err = "file does not exist" };
+    pub fn fileExists(io: std.Io, value: []const u8) ValidationResult {
+        return if (validateFileExists(io, value)) .{ .ok = {} } else .{ .err = "file does not exist" };
     }
 
-    pub fn directoryExists(value: []const u8) ValidationResult {
-        return if (validateDirectoryExists(value)) .{ .ok = {} } else .{ .err = "directory does not exist" };
+    pub fn directoryExists(io: std.Io, value: []const u8) ValidationResult {
+        return if (validateDirectoryExists(io, value)) .{ .ok = {} } else .{ .err = "directory does not exist" };
     }
 
-    pub fn fileNameSafe(value: []const u8) ValidationResult {
+    pub fn fileNameSafe(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
         return if (validateFileName(value)) .{ .ok = {} } else .{ .err = "invalid file name" };
     }
 
     /// Creates a validator for file name length.
     pub fn fileNameLength(comptime min_len: usize, comptime max_len: usize) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 return ensureLength(value, min_len, max_len, "file name length is out of range");
             }
         }.validate;
@@ -604,7 +627,8 @@ pub const Validators = struct {
         comptime max_len: ?usize,
     ) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 if (!validateFileName(value)) return .{ .err = "invalid file name" };
 
                 if (allowed_extensions.len > 0) {
@@ -623,7 +647,8 @@ pub const Validators = struct {
     /// Creates a validator that checks file extension membership.
     pub fn extension(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
             }
         }.validate;
@@ -632,8 +657,8 @@ pub const Validators = struct {
     /// Creates a validator that requires existing file with an allowed extension.
     pub fn existingFileWithExtension(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
-                if (!validateFileExists(value)) return .{ .err = "file does not exist" };
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                if (!validateFileExists(io, value)) return .{ .err = "file does not exist" };
                 return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
             }
         }.validate;
@@ -642,7 +667,8 @@ pub const Validators = struct {
     /// Creates a validator for safe file names that must use one of the allowed extensions.
     pub fn fileNameWithExtensions(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
+                _ = io;
                 if (!validateFileName(value)) return .{ .err = "invalid file name" };
                 return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
             }
@@ -652,9 +678,9 @@ pub const Validators = struct {
     /// Compose validators with logical AND semantics.
     pub fn allOf(comptime validator_list: []const ValidatorFn) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
                 inline for (validator_list) |validator| {
-                    const res = validator(value);
+                    const res = validator(io, value);
                     if (!res.isOk()) return res;
                 }
                 return .{ .ok = {} };
@@ -665,9 +691,9 @@ pub const Validators = struct {
     /// Compose validators with logical OR semantics.
     pub fn anyOf(comptime validator_list: []const ValidatorFn) ValidatorFn {
         return struct {
-            fn validate(value: []const u8) ValidationResult {
+            fn validate(io: std.Io, value: []const u8) ValidationResult {
                 inline for (validator_list) |validator| {
-                    const res = validator(value);
+                    const res = validator(io, value);
                     if (res.isOk()) return .{ .ok = {} };
                 }
                 return .{ .err = "value did not satisfy any validator" };
@@ -776,13 +802,13 @@ test "parseIntInRange" {
 }
 
 test "Validators.nonEmpty" {
-    try std.testing.expect(Validators.nonEmpty("hello").isOk());
-    try std.testing.expect(!Validators.nonEmpty("").isOk());
+    try std.testing.expect(Validators.nonEmpty(std.Io.failing, "hello").isOk());
+    try std.testing.expect(!Validators.nonEmpty(std.Io.failing, "").isOk());
 }
 
 test "Validators.alphanumeric" {
-    try std.testing.expect(Validators.alphanumeric("Hello123").isOk());
-    try std.testing.expect(!Validators.alphanumeric("Hello 123").isOk());
+    try std.testing.expect(Validators.alphanumeric(std.Io.failing, "Hello123").isOk());
+    try std.testing.expect(!Validators.alphanumeric(std.Io.failing, "Hello 123").isOk());
 }
 
 test "hasExtension and hasAnyExtension" {
@@ -807,10 +833,10 @@ test "validateFileName" {
 
 test "Validators.fileNameWithExtensions" {
     const validator = Validators.fileNameWithExtensions(&[_][]const u8{ "json", "yaml" }, false);
-    try std.testing.expect(validator("config.json").isOk());
-    try std.testing.expect(validator("CONFIG.YAML").isOk());
-    try std.testing.expect(!validator("config.txt").isOk());
-    try std.testing.expect(!validator("path/config.json").isOk());
+    try std.testing.expect(validator(std.Io.failing, "config.json").isOk());
+    try std.testing.expect(validator(std.Io.failing, "CONFIG.YAML").isOk());
+    try std.testing.expect(!validator(std.Io.failing, "config.txt").isOk());
+    try std.testing.expect(!validator(std.Io.failing, "path/config.json").isOk());
 }
 
 test "Validators.allOf and anyOf" {
@@ -818,24 +844,24 @@ test "Validators.allOf and anyOf" {
         Validators.fileNameSafe,
         Validators.fileNameLength(3, 32),
     });
-    try std.testing.expect(valid_name("cfg.json").isOk());
-    try std.testing.expect(!valid_name("a").isOk());
+    try std.testing.expect(valid_name(std.Io.failing, "cfg.json").isOk());
+    try std.testing.expect(!valid_name(std.Io.failing, "a").isOk());
 
     const numeric_or_alnum = Validators.anyOf(&[_]ValidatorFn{
         Validators.numeric,
         Validators.alphanumeric,
     });
-    try std.testing.expect(numeric_or_alnum("123").isOk());
-    try std.testing.expect(numeric_or_alnum("abc123").isOk());
-    try std.testing.expect(!numeric_or_alnum("abc-123").isOk());
+    try std.testing.expect(numeric_or_alnum(std.Io.failing, "123").isOk());
+    try std.testing.expect(numeric_or_alnum(std.Io.failing, "abc123").isOk());
+    try std.testing.expect(!numeric_or_alnum(std.Io.failing, "abc-123").isOk());
 }
 
 test "Validators.fileNamePolicy" {
     const validator = Validators.fileNamePolicy(&[_][]const u8{"json"}, false, 8, 64);
-    try std.testing.expect(validator("result.json").isOk());
-    try std.testing.expect(!validator("result.txt").isOk());
-    try std.testing.expect(!validator("ab.json").isOk());
-    try std.testing.expect(!validator("bad/name.json").isOk());
+    try std.testing.expect(validator(std.Io.failing, "result.json").isOk());
+    try std.testing.expect(!validator(std.Io.failing, "result.txt").isOk());
+    try std.testing.expect(!validator(std.Io.failing, "ab.json").isOk());
+    try std.testing.expect(!validator(std.Io.failing, "bad/name.json").isOk());
 }
 
 test "email, URL, IP, UUID validators" {
@@ -904,23 +930,23 @@ test "endpoint validator" {
 
 test "Validators intRange and floatRange" {
     const int_validator = Validators.intRange(1, 10);
-    try std.testing.expect(int_validator("5").isOk());
-    try std.testing.expect(!int_validator("0").isOk());
-    try std.testing.expect(!int_validator("abc").isOk());
+    try std.testing.expect(int_validator(std.Io.failing, "5").isOk());
+    try std.testing.expect(!int_validator(std.Io.failing, "0").isOk());
+    try std.testing.expect(!int_validator(std.Io.failing, "abc").isOk());
 
     const float_validator = Validators.floatRange(0.1, 1.0);
-    try std.testing.expect(float_validator("0.5").isOk());
-    try std.testing.expect(!float_validator("2.0").isOk());
-    try std.testing.expect(!float_validator("bad").isOk());
+    try std.testing.expect(float_validator(std.Io.failing, "0.5").isOk());
+    try std.testing.expect(!float_validator(std.Io.failing, "2.0").isOk());
+    try std.testing.expect(!float_validator(std.Io.failing, "bad").isOk());
 }
 
 test "Validators ipv6 and ipAny" {
-    try std.testing.expect(Validators.ipv6("2001:db8::8a2e:370:7334").isOk());
-    try std.testing.expect(!Validators.ipv6("invalid-v6").isOk());
+    try std.testing.expect(Validators.ipv6(std.Io.failing, "2001:db8::8a2e:370:7334").isOk());
+    try std.testing.expect(!Validators.ipv6(std.Io.failing, "invalid-v6").isOk());
 
-    try std.testing.expect(Validators.ipAny("192.168.0.1").isOk());
-    try std.testing.expect(Validators.ipAny("fe80::1").isOk());
-    try std.testing.expect(!Validators.ipAny("hostname").isOk());
+    try std.testing.expect(Validators.ipAny(std.Io.failing, "192.168.0.1").isOk());
+    try std.testing.expect(Validators.ipAny(std.Io.failing, "fe80::1").isOk());
+    try std.testing.expect(!Validators.ipAny(std.Io.failing, "hostname").isOk());
 }
 
 test "Validators keyValuePair" {
@@ -929,6 +955,6 @@ test "Validators keyValuePair" {
     try std.testing.expect(!validateKeyValuePair("=prod"));
     try std.testing.expect(!validateKeyValuePair("novalue"));
 
-    try std.testing.expect(Validators.keyValuePair("k=v").isOk());
-    try std.testing.expect(!Validators.keyValuePair("k=").isOk());
+    try std.testing.expect(Validators.keyValuePair(std.Io.failing, "k=v").isOk());
+    try std.testing.expect(!Validators.keyValuePair(std.Io.failing, "k=").isOk());
 }

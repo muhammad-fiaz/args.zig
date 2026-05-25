@@ -1,10 +1,8 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
     // Initialize configuration.
     // By default, parsing_mode is .permissive, which causes 'expect' to warn on mismatch.
@@ -38,7 +36,7 @@ pub fn main() !void {
     });
 
     // Parse command line arguments
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const env = result.getString("env") orelse "default";

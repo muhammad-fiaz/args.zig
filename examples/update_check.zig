@@ -4,11 +4,9 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // Setup allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.heap.c_allocator;
 
     // Display library version info
     std.debug.print("args.zig Library Information:\n", .{});
@@ -56,9 +54,8 @@ pub fn main() !void {
     std.debug.print("  Check MY_APP_NO_UPDATE_CHECK env var\n\n", .{});
 
     // Example of conditional disable based on environment
-    const no_update = std.process.getEnvVarOwned(allocator, "MY_APP_NO_UPDATE_CHECK") catch null;
-    if (no_update) |val| {
-        allocator.free(val);
+    const no_update = init.environ_map.get("MY_APP_NO_UPDATE_CHECK");
+    if (no_update != null) {
         args.disableUpdateCheck();
         std.debug.print("  Update checking disabled via environment variable\n", .{});
     }

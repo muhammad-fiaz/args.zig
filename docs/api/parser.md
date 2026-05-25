@@ -372,9 +372,10 @@ try parser.addOption("retries", .{
     .default = "3",
 });
 
-var result = try parser.parseProcess();
+var result = try parser.parseProcess(init);
 defer result.deinit();
 
+const email = result.getString("email") orelse "";
 const service = result.getString("service") orelse "localhost:8080";
 const retries = result.getInt("retries") orelse 3;
 const label = result.getKeyValue("label");
@@ -443,27 +444,26 @@ pub const PromptSelectOrAllDecision = union(enum) {
 
 ```zig
 pub fn resolveSelectOrAllWithPrompt(
-    allocator: std.mem.Allocator,
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
+    io: std.Io,
 ) !PromptSelectOrAllDecision
 ```
 
-Uses parsed `--select` / `--all` first. If missing, prompts the user interactively and validates the answer.
+Uses parsed `--select` / `--all` first. If missing, prompts the user interactively and validates the answer. The `io` parameter provides the I/O context (pass `init.io` from your `main` function).
 
 ### `resolveSelectOrAllWithPromptIO`
 
 ```zig
 pub fn resolveSelectOrAllWithPromptIO(
-    allocator: std.mem.Allocator,
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
-    reader: anytype,
-    writer: anytype,
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
 ) !PromptSelectOrAllDecision
 ```
 
-Same behavior as `resolveSelectOrAllWithPrompt`, but with custom IO streams for tests and embedded runtimes.
+Same behavior as `resolveSelectOrAllWithPrompt`, but with explicit reader/writer references for tests and embedded runtimes.
 
 ### `parseCsvList`
 
@@ -779,14 +779,14 @@ defer result.deinit();
 ### `parseProcess`
 
 ```zig
-pub fn parseProcess(self: *ArgumentParser) !ParseResult
+pub fn parseProcess(self: *ArgumentParser, proc_init: std.process.Init) !ParseResult
 ```
 
-Parses arguments from the current process.
+Parses arguments from the current process using the process initialization context.
 
 **Example:**
 ```zig
-var result = try parser.parseProcess();
+var result = try parser.parseProcess(init);
 defer result.deinit();
 ```
 
@@ -1021,10 +1021,8 @@ Releases resources.
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "example",
@@ -1037,7 +1035,7 @@ pub fn main() !void {
     try parser.addOption("output", .{ .short = 'o', .default = "out.txt" });
     try parser.addPositional("input", .{});
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const verbose = result.getBool("verbose") orelse false;

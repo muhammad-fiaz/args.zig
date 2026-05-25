@@ -14,10 +14,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
       - name: Run Tests
         run: zig build test
 
@@ -28,16 +28,16 @@ jobs:
     outputs:
       bench_output: ${{ steps.run_bench.outputs.bench_output }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
       - name: Run Benchmarks
         id: run_bench
         run: |
           # Run benchmarks (generates benchmark-results.md)
           zig build bench || true
-          
+
           # Prepare output for release body from the generated markdown file
           echo "bench_output<<EOF" >> $GITHUB_OUTPUT
           if [ -f benchmark-results.md ]; then
@@ -70,8 +70,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
-      
+          version: 0.16.0
+
       - name: Build Library
         run: zig build -Doptimize=ReleaseSafe -Dtarget=${{ matrix.target }}
 
@@ -100,14 +100,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get Release URL
         id: get_url
         run: echo "url=https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz" >> $GITHUB_OUTPUT
 
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Calculate Hash
         id: calc_hash

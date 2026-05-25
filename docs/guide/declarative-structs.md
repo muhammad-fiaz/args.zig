@@ -71,10 +71,8 @@ const Config = struct {
     count: i32,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parsed = try args.parseInto(allocator, Config, .{
         .name = "myapp",
@@ -129,7 +127,7 @@ defer parser.deinit();
 
 try parser.addAppend("include", .{ .short = 'I', .help = "Include paths" });
 
-var result = try parser.parseProcess();
+var result = try parser.parseProcess(init);
 defer result.deinit();
 
 // Access multiple values
@@ -173,7 +171,8 @@ const Config = struct {
     count: i32,
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
     var parser = try args.createParser(allocator, "myapp");
     defer parser.deinit();
     
@@ -189,7 +188,7 @@ pub fn main() !void {
     });
     try parser.addAppend("include", .{ .short = 'I' });
     
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
     
     // Access values manually

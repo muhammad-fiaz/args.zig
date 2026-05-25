@@ -15,14 +15,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Run Zig tests
         run: zig build test --summary all
@@ -57,14 +57,14 @@ jobs:
             target: x86_64-windows
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Run Zig tests on ${{ matrix.target }}
         run: zig build test -Dtarget=${{ matrix.target }} --summary all
@@ -100,14 +100,14 @@ jobs:
           - arm-linux-gnueabihf
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Build for ${{ matrix.target }} (build-only)
         run: zig build -Dtarget=${{ matrix.target }} -Doptimize=Debug

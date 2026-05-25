@@ -455,9 +455,7 @@ fn benchmarkSubcommandSuggestionLookup(allocator: std.mem.Allocator) !void {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.heap.c_allocator;
 
     var results: std.ArrayList(BenchmarkResult) = .empty;
     defer results.deinit(allocator);

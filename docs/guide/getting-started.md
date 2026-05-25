@@ -13,18 +13,30 @@ This guide will help you get started with args.zig in your Zig project.
 
 ## Requirements
 
-- **Zig 0.15.0** or later
+- **Zig 0.16.0** or later
 - A Zig project with `build.zig` and `build.zig.zon`
 
 ## Installation
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.4):
+Install the latest stable release (v0.0.5):
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.5.tar.gz
+```
+
+Install the supported release for zig v0.15 (v0.0.4):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
 ```
+
+> [!NOTE]
+>
+> For Zig v0.15, use `v0.0.4`.  
+> For Zig v0.16 and above, use `v0.0.5`.  
+> Keep in mind that `v0.0.5` is only compatible with Zig v0.16+.
 
 ### Nightly Installation
 
@@ -73,11 +85,9 @@ Create a simple command-line application:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // Setup allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = init.arena.allocator();
 
     // Create parser
     var parser = try args.ArgumentParser.init(allocator, .{
@@ -100,7 +110,7 @@ pub fn main() !void {
     });
 
     // Parse arguments
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     // Use the results

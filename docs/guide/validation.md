@@ -65,7 +65,8 @@ fn validatePort(val: []const u8) args.validation.ValidationResult {
     return .{ .ok = {} };
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
     // ... setup parser ...
 
     try parser.addOption("port", .{
@@ -204,7 +205,7 @@ Most typed helper values are stored as strings, so retrieve them with `getString
 For numeric options where you set `.value_type = .int`, use `getInt(...)`.
 
 ```zig
-var parsed = try parser.parseProcess();
+var parsed = try parser.parseProcess(init);
 defer parsed.deinit();
 
 const email = parsed.getString("email") orelse "";

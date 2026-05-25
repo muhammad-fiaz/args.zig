@@ -1,5 +1,5 @@
 //! Argument schema definitions for args.zig.
-//! Minimum Zig version: 0.15.0
+//! Minimum Zig version: 0.16.0
 
 const std = @import("std");
 const types = @import("types.zig");

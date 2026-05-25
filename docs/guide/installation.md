@@ -13,19 +13,29 @@ head:
 
 ## Prerequisites
 
-- **Zig 0.15.0** or later.
+- **Zig 0.16.0** or later.
 
 ## Adding to your Project
 
 ### Release Installation (Recommended)
 
-To install the latest stable release (v0.0.4), verify the hash and add it to your `build.zig.zon` by running:
+To install the latest stable release for zig v0.16 (v0.0.5), verify the hash and add it to your `build.zig.zon` by running:
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.5.tar.gz
+```
+
+Install the supported release for zig v0.15 (v0.0.4):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
 ```
 
-This command will automatically download the package and update your `build.zig.zon` with the correct url and hash.
+> [!NOTE]
+>
+> For Zig v0.15, use `v0.0.4`.  
+> For Zig v0.16 and above, use `v0.0.5`.  
+> Keep in mind that `v0.0.5` is only compatible with Zig v0.16+.
 
 ### Nightly Installation
 
@@ -69,10 +79,8 @@ Create a simple `main.zig` to verify the installation:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "hello",
@@ -84,7 +92,7 @@ pub fn main() !void {
         .help = "Enable verbose output"
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     if (result.getBool("verbose") orelse false) {

@@ -1,10 +1,8 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "data-input-validation",
@@ -42,7 +40,7 @@ pub fn main() !void {
         .validator = args.Validators.intRange(1, 10),
     });
 
-    const workspace_abs = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const workspace_abs = try std.Io.Dir.cwd().realPathFileAlloc(init.io, ".", allocator);
     defer allocator.free(workspace_abs);
 
     const argv = [_][]const u8{

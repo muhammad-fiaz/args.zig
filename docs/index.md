@@ -63,7 +63,7 @@ features:
 
 ## Requirements
 
-- **Zig 0.15.0** or later
+- **Zig 0.16.0** or later
 - No external dependencies
 
 ## Quick Example
@@ -72,10 +72,8 @@ features:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
@@ -87,7 +85,7 @@ pub fn main() !void {
     try parser.addFlag("verbose", .{ .short = 'v', .help = "Enable verbose output" });
     try parser.addOption("output", .{ .short = 'o', .help = "Output file" });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     if (result.getBool("verbose") orelse false) {
@@ -100,17 +98,23 @@ pub fn main() !void {
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.4):
+Install the latest stable release (v0.0.5):
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.5.tar.gz
+```
+
+Install the supported release for Zig v0.15 (v0.0.4):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
 ```
 
-Install the previous stable release (v0.0.3):
-
-```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
-```
+> [!NOTE]
+>
+> For Zig v0.15, use `v0.0.4`.  
+> For Zig v0.16 and above, use `v0.0.5`.  
+> Keep in mind that `v0.0.5` is only compatible with Zig v0.16+.
 
 ### Nightly Installation
 
@@ -134,5 +138,5 @@ exe.root_module.addImport("args", args_dep.module("args"));
 
 ## Current Version
 
-- **Package Version:** 0.0.4
-- **Minimum Zig Version:** 0.15.0
+- **Package Version:** 0.0.5
+- **Minimum Zig Version:** 0.16.0

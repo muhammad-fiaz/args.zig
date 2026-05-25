@@ -3,10 +3,8 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "key-value-demo",
@@ -21,22 +19,19 @@ pub fn main() !void {
         .help = "Set configuration property (e.g., -c db=postgres)",
     });
 
-    const raw_args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, raw_args);
+    const raw_args = try init.minimal.args.toSlice(init.arena.allocator());
 
     var result: args.ParseResult = undefined;
     if (raw_args.len > 1) {
-        result = try parser.parseProcess();
+        result = try parser.parseProcess(init);
     } else {
         std.debug.print("No args provided. Simulating: -c db=postgres\n\n", .{});
-        const sim_args = [_][]const u8{ "-c", "db=postgres" };
-        result = try parser.parse(&sim_args);
+        result = try parser.parse(&[_][]const u8{ "-c", "db=postgres" });
     }
-    defer result.deinit();
-
     if (result.getKeyValue("config")) |kv| {
         std.debug.print("Configuration: Key='{s}', Value='{s}'\n", .{ kv.key, kv.value });
     } else {
         std.debug.print("No config provided.\n", .{});
     }
+    result.deinit();
 }

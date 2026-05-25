@@ -14,10 +14,8 @@ fn onOutput(name: []const u8, value: ?[]const u8) void {
     }
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "callback-demo",
@@ -45,20 +43,17 @@ pub fn main() !void {
         .callback = onVerbose,
     });
 
-    const raw_args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, raw_args);
+    const raw_args = try init.minimal.args.toSlice(init.arena.allocator());
 
     var result: args.ParseResult = undefined;
     if (raw_args.len > 1) {
-        result = try parser.parseProcess();
+        result = try parser.parseProcess(init);
     } else {
         std.debug.print("No args provided. Simulating: --output results.txt --loud\n\n", .{});
-        const sim_args = [_][]const u8{ "--output", "results.txt", "--loud" };
-        result = try parser.parse(&sim_args);
+        result = try parser.parse(&[_][]const u8{ "--output", "results.txt", "--loud" });
     }
-    defer result.deinit();
-
     if (result.getBool("verbose")) |v| {
         if (v) std.debug.print("Verbose mode is ON\n", .{});
     }
+    result.deinit();
 }

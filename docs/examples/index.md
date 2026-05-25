@@ -19,10 +19,8 @@ A simple CLI with flags, options, and positional arguments:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "greet",
@@ -50,7 +48,7 @@ pub fn main() !void {
         .required = true,
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const verbose = result.getBool("verbose") orelse false;
@@ -80,10 +78,8 @@ Git-style subcommands with their own arguments:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "mycli",
@@ -117,7 +113,7 @@ pub fn main() !void {
         },
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const verbose = result.getBool("verbose") orelse false;
@@ -159,10 +155,8 @@ Using environment variables as fallback values:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "server",
@@ -192,7 +186,7 @@ pub fn main() !void {
         .required = true,
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const host = result.getString("host").?;
@@ -434,10 +428,8 @@ Using counters for verbosity and choices for validation:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "logger",
@@ -466,7 +458,7 @@ pub fn main() !void {
         .default = "text",
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const verbose_val = result.get("verbose");
@@ -503,10 +495,8 @@ Using `.expect` to warn on unexpected values instead of erroring:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "expect-demo",
@@ -527,7 +517,7 @@ pub fn main() !void {
         .help = "Output format (strict: json, text)",
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     const env = result.getString("env") orelse "default";
@@ -565,10 +555,8 @@ const Config = struct {
     count: i32,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parsed = try args.parseInto(allocator, Config, .{
         .name = "struct-demo",
@@ -596,10 +584,8 @@ Generating shell completion scripts:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
@@ -610,16 +596,15 @@ pub fn main() !void {
     try parser.addFlag("verbose", .{ .short = 'v' });
     try parser.addOption("output", .{ .short = 'o' });
 
-    // Add completion subcommand
     try parser.addSubcommand(.{
         .name = "completion",
-        .help = "Generate shell completion script",
+        .help = "Generate shell completions",
         .args = &[_]args.ArgSpec{
             .{ .name = "shell", .positional = true, .required = true },
         },
     });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     if (result.subcommand) |cmd| {
@@ -661,10 +646,8 @@ For production or CI/CD environments:
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     // Method 1: Global disable
     args.disableUpdateCheck();

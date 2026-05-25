@@ -19,16 +19,14 @@ const Config = struct {
     timeout: ?f64,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
     // Note: We use parseInto which calls parseProcess internally for this example.
     var parsed = args.parseInto(allocator, Config, .{
         .name = "struct-demo",
         .description = "Declarative configuration via structs",
-    }, null) catch |err| {
+    }, null, init) catch |err| {
 
         // Currently the library prints error if exit_on_error is true (default).
         std.debug.print("Failed to parse: {}\n", .{err});

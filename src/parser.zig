@@ -2,6 +2,7 @@
 //! Handles tokenization, validation, and value mapping.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const types = @import("types.zig");
 const schema_mod = @import("schema.zig");
 const tokenizer_mod = @import("tokenizer.zig");
@@ -26,16 +27,20 @@ pub const Parser = struct {
     allocator: std.mem.Allocator,
     spec: CommandSpec,
     cfg: Config,
+    io: std.Io,
+    env_map: ?*const std.process.Environ.Map,
     short_map: std.AutoHashMap(u8, *const ArgSpec),
     long_map: std.StringHashMap(*const ArgSpec),
     long_key_storage: std.ArrayList([]const u8),
 
     /// Initializes a new parser instance with the given specification.
-    pub fn init(allocator: std.mem.Allocator, spec: CommandSpec) !Parser {
+    pub fn init(allocator: std.mem.Allocator, spec: CommandSpec, io: std.Io, env_map: ?*const std.process.Environ.Map) !Parser {
         var self = Parser{
             .allocator = allocator,
             .spec = spec,
             .cfg = config_mod.getConfig(),
+            .io = io,
+            .env_map = env_map,
             .short_map = std.AutoHashMap(u8, *const ArgSpec).init(allocator),
             .long_map = std.StringHashMap(*const ArgSpec).init(allocator),
             .long_key_storage = .empty,
@@ -115,7 +120,7 @@ pub const Parser = struct {
                                     .name = sub.name,
                                     .args = sub.args,
                                     .subcommands = sub.subcommands,
-                                });
+                                }, self.io, self.env_map);
                                 defer sub_parser.deinit();
                                 const sub_result = try sub_parser.parse(tokenizer.remaining());
                                 result.subcommand_args = try self.allocator.create(ParseResult);
@@ -163,6 +168,7 @@ pub const Parser = struct {
     }
 
     fn processEnvVars(self: *Parser, result: *ParseResult) !void {
+        const env_map = self.env_map orelse return;
         for (self.spec.args) |arg| {
             if (result.contains(arg.getDestination())) continue;
 
@@ -188,11 +194,10 @@ pub const Parser = struct {
             }
 
             if (env_key) |key| {
-                if (std.process.getEnvVarOwned(self.allocator, key)) |env_val| {
-                    defer self.allocator.free(env_val);
+                if (env_map.get(key)) |env_val| {
                     const value = try self.parseOwnedValue(result, env_val, arg.value_type);
                     try result.put(arg.getDestination(), value);
-                } else |_| {}
+                }
             }
         }
     }
@@ -521,7 +526,7 @@ pub const Parser = struct {
 
                 // Validate if needed, but mainly we want to run the callback
                 if (spec.validator) |v| {
-                    const res = v(decoded.value);
+                    const res = v(self.io, decoded.value);
                     if (!res.isOk()) {
                         if (res.getMessage()) |msg| {
                             if (spec.custom_error_message) |custom| {
@@ -566,7 +571,7 @@ pub const Parser = struct {
 
                 const value = try self.parseOwnedValue(result, decoded.value, spec.value_type);
                 if (spec.validator) |v| {
-                    const res = v(decoded.value);
+                    const res = v(self.io, decoded.value);
                     if (!res.isOk()) {
                         return errors.ValidationError.CustomValidationFailed;
                     }
@@ -685,7 +690,7 @@ pub const Parser = struct {
         const value = try self.parseOwnedValue(result, decoded.value, spec.value_type);
 
         if (spec.validator) |v| {
-            const res = v(decoded.value);
+            const res = v(self.io, decoded.value);
             if (!res.isOk()) {
                 if (res.getMessage()) |msg| {
                     if (spec.custom_error_message) |custom| {
@@ -762,7 +767,7 @@ pub const Parser = struct {
 
                     const value = try self.parseOwnedValue(result, decoded.value, arg.value_type);
                     if (arg.validator) |v| {
-                        const res = v(decoded.value);
+                        const res = v(self.io, decoded.value);
                         if (!res.isOk()) {
                             return errors.ValidationError.CustomValidationFailed;
                         }
@@ -807,9 +812,14 @@ pub const Parser = struct {
 
 /// Convenience function to parse arguments with a single call.
 pub fn parseArgs(allocator: std.mem.Allocator, spec: CommandSpec, args: []const []const u8) !ParseResult {
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
     return parser.parse(args);
+}
+
+pub fn defaultIo() std.Io {
+    if (builtin.is_test) return std.testing.io;
+    return std.Io.failing;
 }
 
 test "Parser basic parsing" {
@@ -827,7 +837,7 @@ test "Parser basic parsing" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{ "-v", "--output", "file.txt" };
@@ -849,7 +859,7 @@ test "Parser counter action" {
         .args = &[_]ArgSpec{.{ .name = "verbose", .short = 'v', .action = .count }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{ "-v", "-v", "-v" };
@@ -870,7 +880,7 @@ test "Parser inline value" {
         .args = &[_]ArgSpec{.{ .name = "output", .short = 'o', .long = "output" }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{"--output=result.txt"};
@@ -894,7 +904,7 @@ test "Parser positional arguments" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{ "input.txt", "output.txt" };
@@ -916,7 +926,7 @@ test "Parser default values" {
         .args = &[_]ArgSpec{.{ .name = "count", .long = "count", .value_type = .int, .default = "10" }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     var result = try parser.parse(&[_][]const u8{});
@@ -936,7 +946,7 @@ test "Parser duplicate singleton option returns DuplicateArgument" {
         .args = &[_]ArgSpec{.{ .name = "email", .long = "email" }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{ "--email", "one@example.com", "--email", "two@example.com" };
@@ -954,7 +964,7 @@ test "Parser decodes base64 option values" {
         .args = &[_]ArgSpec{.{ .name = "secret", .long = "secret", .decode_mode = .base64_std }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{ "--secret", "c2VjcmV0" };
@@ -975,7 +985,7 @@ test "Parser invalid base64 decode returns InvalidValue" {
         .args = &[_]ArgSpec{.{ .name = "secret", .long = "secret", .decode_mode = .base64_std }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{ "--secret", "@@not-base64@@" };
@@ -993,7 +1003,7 @@ test "Parser duplicate count option is allowed" {
         .args = &[_]ArgSpec{.{ .name = "verbose", .short = 'v', .action = .count }},
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{ "-v", "-v" };
@@ -1016,7 +1026,7 @@ test "Parser unknown subcommand returns UnknownSubcommand when no positional exi
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{"clnoe"};
@@ -1037,7 +1047,7 @@ test "Parser unknown subcommand in permissive mode is collected as remaining" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{"clnoe"};
@@ -1061,7 +1071,7 @@ test "Parser first token can remain positional even when subcommands exist" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{"unknown-value"};
@@ -1077,7 +1087,7 @@ test "Parser separator handling" {
 
     const spec = CommandSpec{ .name = "test", .add_help = false, .args = &[_]ArgSpec{} };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{ "--", "--not-option", "regular" };
@@ -1105,7 +1115,7 @@ test "Parser argument groups exclusive" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     // Case 1: One option (valid)
@@ -1129,7 +1139,8 @@ test "Parser custom validator" {
     defer config_mod.resetConfig();
 
     const Validator = struct {
-        fn check(val: []const u8) validation.ValidationResult {
+        fn check(io: std.Io, val: []const u8) validation.ValidationResult {
+            _ = io;
             if (val.len < 3) return .{ .err = "too short" };
             return .{ .ok = {} };
         }
@@ -1143,7 +1154,7 @@ test "Parser custom validator" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     // Case 1: Valid input
@@ -1173,7 +1184,7 @@ test "Parser aliases" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     // Original long name
@@ -1214,7 +1225,7 @@ test "Parser environment variables" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     // Verify that the parser handles missing environment variables gracefully.
@@ -1239,7 +1250,7 @@ test "Parser owns parsed string memory" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -1271,7 +1282,7 @@ test "Parser case-insensitive long options" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{"--VERBOSE"};
@@ -1287,7 +1298,7 @@ test "Parser permissive unknown options" {
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{ .name = "test", .add_help = false, .args = &[_]ArgSpec{} };
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{"--unknown"};
@@ -1304,7 +1315,7 @@ test "Parser ignore unknown options" {
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{ .name = "test", .add_help = false, .args = &[_]ArgSpec{} };
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{"--unknown"};
@@ -1327,7 +1338,7 @@ test "Parser disable interspersed options" {
             .{ .name = "input", .positional = true },
         },
     };
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{ "file.txt", "--verbose" };
@@ -1346,7 +1357,7 @@ test "Parser disable short clusters" {
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{ .name = "test", .add_help = false, .args = &[_]ArgSpec{} };
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const args = [_][]const u8{"-abc"};
@@ -1371,7 +1382,7 @@ test "Parser supports negated long flags" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     {
@@ -1386,7 +1397,7 @@ test "Parser supports negated long flags" {
 
 test "Parser rejects negated long flags when disabled" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false, .allow_negated_flags = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .allow_negated_flags = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -1397,7 +1408,7 @@ test "Parser rejects negated long flags when disabled" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{"--no-cache"};
@@ -1417,7 +1428,7 @@ test "Parser case-insensitive choices when case_sensitive false" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     const argv = [_][]const u8{ "--level", "DEBUG" };
@@ -1440,7 +1451,7 @@ test "Parser validates positional choices" {
         },
     };
 
-    var parser = try Parser.init(allocator, spec);
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
     defer parser.deinit();
 
     {

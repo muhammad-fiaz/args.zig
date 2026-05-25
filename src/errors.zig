@@ -67,9 +67,9 @@ pub const ErrorContext = struct {
     suggestion: ?[]const u8 = null,
 
     pub fn format(self: ErrorContext, allocator: std.mem.Allocator) ![]const u8 {
-        var result: std.ArrayList(u8) = .empty;
-        errdefer result.deinit(allocator);
-        const writer = result.writer(allocator);
+        var aw: std.Io.Writer.Allocating = .init(allocator);
+        errdefer aw.deinit();
+        const writer = &aw.writer;
 
         if (self.argument) |arg| try writer.print("argument '{s}': ", .{arg});
         if (self.message) |msg| try writer.writeAll(msg);
@@ -77,7 +77,7 @@ pub const ErrorContext = struct {
         if (self.expected) |exp| try writer.print(" (expected {s})", .{exp});
         if (self.suggestion) |sug| try writer.print("\n  Did you mean '{s}'?", .{sug});
 
-        return result.toOwnedSlice(allocator);
+        return aw.toOwnedSlice();
     }
 };
 

@@ -1411,27 +1411,41 @@ pub const ArgumentParser = struct {
 
     /// Parses the provided argument slice.
     pub fn parse(self: *ArgumentParser, args_slice: []const []const u8) !ParseResult {
+        return self.parseWithIo(args_slice, parser.defaultIo());
+    }
+
+    /// Parses the provided argument slice using an explicit Io implementation.
+    pub fn parseWithIo(self: *ArgumentParser, args_slice: []const []const u8, io: std.Io) !ParseResult {
+        return self.parseWithEnv(args_slice, io, null);
+    }
+
+    fn parseWithEnv(
+        self: *ArgumentParser,
+        args_slice: []const []const u8,
+        io: std.Io,
+        env_map: ?*const std.process.Environ.Map,
+    ) !ParseResult {
         const spec = self.buildSpec();
-        var p = try parser.Parser.init(self.allocator, spec);
+        var p = try parser.Parser.init(self.allocator, spec, io, env_map);
         defer p.deinit();
         return p.parse(args_slice);
     }
 
     /// Parses arguments from the process's command line.
-    pub fn parseProcess(self: *ArgumentParser) !ParseResult {
-        var args_iter = try std.process.argsWithAllocator(self.allocator);
-        defer args_iter.deinit();
+    pub fn parseProcess(self: *ArgumentParser, proc_init: std.process.Init) !ParseResult {
+        const args_sentinels = try proc_init.minimal.args.toSlice(proc_init.arena.allocator());
+        var args_list = try self.allocator.alloc([]const u8, args_sentinels.len);
+        defer self.allocator.free(args_list);
 
-        var args_list: std.ArrayList([]const u8) = .empty;
-        defer args_list.deinit(self.allocator);
-
-        _ = args_iter.next(); // Skip program name
-
-        while (args_iter.next()) |arg| {
-            try args_list.append(self.allocator, arg);
+        for (args_sentinels, 0..) |arg, idx| {
+            args_list[idx] = arg;
         }
 
-        return self.parse(args_list.items);
+        if (args_list.len <= 1) {
+            return self.parseWithEnv(&.{}, proc_init.io, proc_init.environ_map);
+        }
+
+        return self.parseWithEnv(args_list[1..], proc_init.io, proc_init.environ_map);
     }
 
     /// Generates the help text for the configured arguments.
@@ -1682,7 +1696,7 @@ pub fn parse(
 /// Example:
 /// ```zig
 /// const Config = struct { verbose: bool, output: ?[]const u8 };
-/// var result = try args.parseInto(allocator, Config, .{ .name = "myapp" }, null);
+/// var result = try args.parseInto(allocator, Config, .{ .name = "myapp" }, null, init);
 /// defer result.deinit();
 /// std.debug.print("Verbose: {}\n", .{result.options.verbose});
 /// ```
@@ -1691,6 +1705,7 @@ pub fn parseInto(
     comptime T: type,
     options: ArgumentParser.InitOptions,
     args_slice: ?[]const []const u8,
+    init: ?std.process.Init,
 ) !ParseIntoResult(T) {
     var arg_parser = try ArgumentParser.init(allocator, options);
     defer arg_parser.deinit();
@@ -1700,7 +1715,12 @@ pub fn parseInto(
         try arg_parser.addArg(spec);
     }
 
-    var result = if (args_slice) |a| try arg_parser.parse(a) else try arg_parser.parseProcess();
+    var result = if (args_slice) |a|
+        try arg_parser.parse(a)
+    else if (init) |process_init|
+        try arg_parser.parseProcess(process_init)
+    else
+        return error.MissingProcessInit;
 
     var opts: T = undefined;
     inline for (@typeInfo(T).@"struct".fields) |field| {
@@ -2125,7 +2145,7 @@ pub fn resolveIncludeExcludeStrict(
     };
 }
 
-fn writePromptMenu(writer: anytype, options: PromptSelectOrAllOptions) !void {
+fn writePromptMenu(writer: *std.Io.Writer, options: PromptSelectOrAllOptions) !void {
     try writer.print("{s}:\n", .{options.question});
     if (options.allow_all) {
         try writer.writeAll("  0) all\n");
@@ -2137,11 +2157,10 @@ fn writePromptMenu(writer: anytype, options: PromptSelectOrAllOptions) !void {
 }
 
 pub fn resolveSelectOrAllWithPromptIO(
-    allocator: std.mem.Allocator,
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
-    reader: anytype,
-    writer: anytype,
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
 ) !PromptSelectOrAllDecision {
     if (options.choices.len == 0 and !options.allow_all) return error.InvalidConfig;
     const case_sensitive = effectivePromptCaseSensitive(options);
@@ -2169,11 +2188,10 @@ pub fn resolveSelectOrAllWithPromptIO(
     while (attempts_left > 0) : (attempts_left -= 1) {
         try writePromptMenu(writer, options);
 
-        const line_opt = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
-        if (line_opt == null) return error.EndOfStream;
-        defer allocator.free(line_opt.?);
+        const line_opt = try reader.takeDelimiter('\n');
+        const owned_line = line_opt orelse return error.EndOfStream;
 
-        const answer = trimAsciiWhitespace(line_opt.?);
+        const answer = trimAsciiWhitespace(owned_line);
 
         if (answer.len == 0) {
             if (options.default_choice) |def| {
@@ -2222,13 +2240,15 @@ pub fn resolveSelectOrAllWithPromptIO(
 }
 
 pub fn resolveSelectOrAllWithPrompt(
-    allocator: std.mem.Allocator,
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
+    io: std.Io,
 ) !PromptSelectOrAllDecision {
-    const reader = std.fs.File.stdin().deprecatedReader();
-    const writer = std.fs.File.stdout().deprecatedWriter();
-    return resolveSelectOrAllWithPromptIO(allocator, parsed, options, reader, writer);
+    var input_buf: [1024]u8 = undefined;
+    var output_buf: [1024]u8 = undefined;
+    var reader = std.Io.File.stdin().reader(io, &input_buf);
+    var writer = std.Io.File.stdout().writer(io, &output_buf);
+    return resolveSelectOrAllWithPromptIO(parsed, options, &reader.interface, &writer.interface);
 }
 
 /// Quick parse from process args with minimal setup.
@@ -2237,13 +2257,14 @@ pub fn quickParse(
     allocator: std.mem.Allocator,
     comptime specs: []const ArgSpec,
     name: []const u8,
+    init: std.process.Init,
 ) !ParseResult {
     var p = try ArgumentParser.init(allocator, .{ .name = name, .config = Config.minimal() });
     defer p.deinit();
     for (specs) |spec| {
         try p.addArg(spec);
     }
-    return p.parseProcess();
+    return p.parseProcess(init);
 }
 
 /// Creates a parser with common defaults for CLI applications.
@@ -2692,8 +2713,8 @@ test "ArgumentParser addFileOptionWithExtensions supports must_exist" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    try tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "{}" });
-    const existing = try tmp.dir.realpathAlloc(allocator, "settings.json");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "settings.json", .data = "{}" });
+    const existing = try tmp.dir.realPathFileAlloc(std.testing.io, "settings.json", allocator);
     defer allocator.free(existing);
 
     var ap = try ArgumentParser.init(allocator, .{
@@ -2813,7 +2834,7 @@ test "ArgumentParser typed validation option helpers" {
     try ap.addKeyValueOption("label", .{});
     try ap.addJsonOption("payload", .{});
 
-    const cwd_abs = try std.fs.cwd().realpathAlloc(allocator, ".");
+    const cwd_abs = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(cwd_abs);
     try ap.addAbsolutePathOption("workspace", .{});
 
@@ -3079,16 +3100,15 @@ test "resolveSelectOrAllWithPromptIO uses parsed values first" {
     var parsed = try ap.parse(&argv);
     defer parsed.deinit();
 
-    var input_stream = std.io.fixedBufferStream("\n");
+    var input_reader: std.Io.Reader = .fixed("\n");
     var out_buf: [256]u8 = undefined;
-    var output_stream = std.io.fixedBufferStream(&out_buf);
+    var output_writer: std.Io.Writer = .fixed(&out_buf);
 
     const decision = try resolveSelectOrAllWithPromptIO(
-        allocator,
         &parsed,
         .{ .choices = &[_][]const u8{ "users", "groups" } },
-        input_stream.reader(),
-        output_stream.writer(),
+        &input_reader,
+        &output_writer,
     );
 
     try std.testing.expect(decision == .selected);
@@ -3101,16 +3121,15 @@ test "resolveSelectOrAllWithPromptIO can choose all" {
     var parsed = ParseResult.init(allocator);
     defer parsed.deinit();
 
-    var input_stream = std.io.fixedBufferStream("all\n");
+    var input_reader: std.Io.Reader = .fixed("all\n");
     var out_buf: [512]u8 = undefined;
-    var output_stream = std.io.fixedBufferStream(&out_buf);
+    var output_writer: std.Io.Writer = .fixed(&out_buf);
 
     const decision = try resolveSelectOrAllWithPromptIO(
-        allocator,
         &parsed,
         .{ .choices = &[_][]const u8{ "users", "groups" }, .question = "Select target" },
-        input_stream.reader(),
-        output_stream.writer(),
+        &input_reader,
+        &output_writer,
     );
 
     try std.testing.expect(decision == .all);
@@ -3122,16 +3141,15 @@ test "resolveSelectOrAllWithPromptIO retries invalid answers" {
     var parsed = ParseResult.init(allocator);
     defer parsed.deinit();
 
-    var input_stream = std.io.fixedBufferStream("bad\n2\n");
+    var input_reader: std.Io.Reader = .fixed("bad\n2\n");
     var out_buf: [1024]u8 = undefined;
-    var output_stream = std.io.fixedBufferStream(&out_buf);
+    var output_writer: std.Io.Writer = .fixed(&out_buf);
 
     const decision = try resolveSelectOrAllWithPromptIO(
-        allocator,
         &parsed,
         .{ .choices = &[_][]const u8{ "users", "groups", "logs" }, .max_attempts = 3 },
-        input_stream.reader(),
-        output_stream.writer(),
+        &input_reader,
+        &output_writer,
     );
 
     try std.testing.expect(decision == .selected);
@@ -3144,16 +3162,15 @@ test "resolveSelectOrAllWithPromptIO supports unique prefix" {
     var parsed = ParseResult.init(allocator);
     defer parsed.deinit();
 
-    var input_stream = std.io.fixedBufferStream("gr\n");
+    var input_reader: std.Io.Reader = .fixed("gr\n");
     var out_buf: [512]u8 = undefined;
-    var output_stream = std.io.fixedBufferStream(&out_buf);
+    var output_writer: std.Io.Writer = .fixed(&out_buf);
 
     const decision = try resolveSelectOrAllWithPromptIO(
-        allocator,
         &parsed,
         .{ .choices = &[_][]const u8{ "users", "groups", "logs" }, .allow_prefix_match = true },
-        input_stream.reader(),
-        output_stream.writer(),
+        &input_reader,
+        &output_writer,
     );
 
     try std.testing.expect(decision == .selected);
@@ -3376,7 +3393,7 @@ test "derive alias for parseInto" {
     };
 
     const test_args = [_][]const u8{ "--verbose", "--count", "42" };
-    var result = try derive(allocator, TestConfig, .{ .name = "test" }, &test_args);
+    var result = try derive(allocator, TestConfig, .{ .name = "test" }, &test_args, null);
     defer result.deinit();
 
     try std.testing.expect(result.options.verbose);

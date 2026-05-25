@@ -10,7 +10,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Prerequisites
 
-- Zig 0.15.0 or later
+- Zig 0.16.0 or later
 - Git
 - Node.js 18+ (for documentation)
 

@@ -124,7 +124,7 @@ try parser.addSelectOrAllCsv(.{
     .all_short = 'a',
 });
 
-var parsed = try parser.parseProcess();
+var parsed = try parser.parseProcess(init);
 defer parsed.deinit();
 
 var resolved = try args.resolveSelectOrAllStrict(allocator, &parsed, .{
@@ -146,12 +146,12 @@ Behavior summary:
 When users do not pass `--select` or `--all`, you can ask them interactively:
 
 ```zig
-const decision = try args.resolveSelectOrAllWithPrompt(allocator, &parsed, .{
+const decision = try args.resolveSelectOrAllWithPrompt(&parsed, .{
     .question = "Select target",
     .choices = &[_][]const u8{ "users", "groups", "logs" },
     .default_choice = "users",
     .allow_all = true,
-});
+}, init.io);
 ```
 
 This supports:
@@ -180,7 +180,7 @@ For common filter pipelines, use built-in helpers:
 ```zig
 try parser.addIncludeExclude(.{ .include_short = 'i', .exclude_short = 'x' });
 
-var parsed = try parser.parseProcess();
+var parsed = try parser.parseProcess(init);
 defer parsed.deinit();
 
 var filters = try args.resolveIncludeExclude(allocator, &parsed, "include", "exclude");
@@ -515,10 +515,8 @@ try parser.addOption("old-format", .{
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "myapp",
@@ -545,7 +543,7 @@ pub fn main() !void {
     // Positional
     try parser.addPositional("input", .{ .help = "Input file", .required = true });
 
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     // Access values

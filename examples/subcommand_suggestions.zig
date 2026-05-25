@@ -1,13 +1,10 @@
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.c_allocator;
 
-    const argv = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, argv);
+    const argv = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (argv.len > 1 and std.mem.eql(u8, argv[1], "--help")) {
         std.debug.print("Run this example without args to trigger an unknown-subcommand suggestion demo.\n", .{});

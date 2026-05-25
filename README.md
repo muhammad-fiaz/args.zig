@@ -3,7 +3,7 @@
 <img  alt="cover" src="https://github.com/user-attachments/assets/6b4390a1-af10-4175-8c8b-c36f3868b398" />
 
 <a href="https://muhammad-fiaz.github.io/args.zig/"><img src="https://img.shields.io/badge/docs-muhammad--fiaz.github.io-blue" alt="Documentation"></a>
-<a href="https://ziglang.org/"><img src="https://img.shields.io/badge/Zig-0.15.0+-orange.svg?logo=zig" alt="Zig Version"></a>
+<a href="https://ziglang.org/"><img src="https://img.shields.io/badge/Zig-0.16.0+-orange.svg?logo=zig" alt="Zig Version"></a>
 <a href="https://github.com/muhammad-fiaz/args.zig"><img src="https://img.shields.io/github/stars/muhammad-fiaz/args.zig" alt="GitHub stars"></a>
 <a href="https://github.com/muhammad-fiaz/args.zig/issues"><img src="https://img.shields.io/github/issues/muhammad-fiaz/args.zig" alt="GitHub issues"></a>
 <a href="https://github.com/muhammad-fiaz/args.zig/pulls"><img src="https://img.shields.io/github/issues-pr/muhammad-fiaz/args.zig" alt="GitHub pull requests"></a>
@@ -63,17 +63,23 @@ A production-grade, high-performance command-line argument parsing library for Z
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.4):
+Install the latest stable release for zig v0.16 (v0.0.5):
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.5.tar.gz
+```
+
+Install the supported release for zig v0.15 (v0.0.4):
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
 ```
 
-Install the previous stable release (v0.0.3):
-
-```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.3.tar.gz
-```
+> [!NOTE]
+>
+> For Zig v0.15, use `v0.0.4`.  
+> For Zig v0.16 and above, use `v0.0.5`.  
+> Keep in mind that `v0.0.5` is only compatible with Zig v0.16+.
 
 ### Nightly Installation
 
@@ -102,10 +108,8 @@ exe.root_module.addImport("args", args_dep.module("args"));
 const std = @import("std");
 const args = @import("args");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
 
     // Create argument parser
     var parser = try args.ArgumentParser.init(allocator, .{
@@ -132,7 +136,7 @@ pub fn main() !void {
     });
 
     // Parse command-line arguments
-    var result = try parser.parseProcess();
+    var result = try parser.parseProcess(init);
     defer result.deinit();
 
     // Use parsed values
@@ -155,7 +159,7 @@ var parser = try args.ArgumentParser.init(allocator, .{ .name = "app" });
 defer parser.deinit();
 try parser.addFlag("verbose", .{ .short = 'v' });
 try parser.addOption("output", .{ .short = 'o' });
-var result = try parser.parseProcess();
+var result = try parser.parseProcess(init);
 defer result.deinit();
 ```
 
@@ -261,7 +265,7 @@ try parser.addOption("peer", .{
     .validator = args.Validators.anyIp,
 });
 
-var result = try parser.parseProcess();
+var result = try parser.parseProcess(init);
 defer result.deinit();
 
 const email = result.getString("email") orelse "";
@@ -325,12 +329,12 @@ defer resolved.deinit();
 Resolve selection from parsed args or ask the user when missing:
 
 ```zig
-const decision = try args.resolveSelectOrAllWithPrompt(allocator, &parsed, .{
+const decision = try args.resolveSelectOrAllWithPrompt(&parsed, .{
     .question = "Select target",
     .choices = &[_][]const u8{ "users", "groups", "logs" },
     .default_choice = "users",
     .allow_all = true,
-});
+}, init.io);
 ```
 
 ### Include/Exclude Filters
@@ -340,7 +344,7 @@ Use reusable helpers for filter-style commands:
 ```zig
 try parser.addIncludeExclude(.{ .include_short = 'i', .exclude_short = 'x' });
 
-var parsed = try parser.parseProcess();
+var parsed = try parser.parseProcess(init);
 defer parsed.deinit();
 
 var filters = try args.resolveIncludeExclude(allocator, &parsed, "include", "exclude");
@@ -619,7 +623,7 @@ Typical results on modern hardware (10,000 iterations):
 
 
 > [!NOTE]
-> Results vary based on hardware and system load. Tested on Windows x86_64 with Zig 0.15.0.
+> Results vary based on hardware and system load. Tested on Windows x86_64 with Zig 0.16.0.
 > If you want the latest release benchmarks, you can find them on the repository [releases](https://github.com/muhammad-fiaz/args.zig/releases).
 
 ## Documentation
@@ -659,5 +663,3 @@ If you find this project helpful, consider supporting it:
 - Report bugs and suggest features
 - [Sponsor on GitHub](https://github.com/sponsors/muhammad-fiaz)
 - [Buy me a coffee](https://pay.muhammadfiaz.com)
-
-
