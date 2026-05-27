@@ -37,6 +37,7 @@ const Config = struct {
     allow_inline_values: bool = true,
     allow_interspersed: bool = true,
     allow_negated_flags: bool = true,
+    allow_brackets: bool = true,
     case_sensitive: bool = true,
     env_prefix: ?[]const u8 = null,
     silent_errors: bool = false, // Suppress error output (for tests)
@@ -93,6 +94,7 @@ const Config = struct {
 | `allow_inline_values` | `true` | Allow `--opt=value` format |
 | `allow_interspersed` | `true` | Allow options after positionals |
 | `allow_negated_flags` | `true` | Allow `--no-flag` for boolean long options |
+| `allow_brackets` | `true` | Allow bracket-delimited list values `{a,b}`, `[a,b]`, `<a,b>` |
 | `case_sensitive` | `true` | Case-sensitive option matching |
 | `env_prefix` | `null` | Prefix for environment variables |
 | `silent_errors` | `false` | Suppress error/warning prints (for tests) |

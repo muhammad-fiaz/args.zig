@@ -11,10 +11,6 @@ pub fn main(init: std.process.Init) !void {
     // Display library version info
     std.debug.print("args.zig Library Information:\n", .{});
     std.debug.print("  Version: {s}\n", .{args.VERSION});
-    std.debug.print("  Major: {d}\n", .{args.VERSION_MAJOR});
-    std.debug.print("  Minor: {d}\n", .{args.VERSION_MINOR});
-    std.debug.print("  Patch: {d}\n", .{args.VERSION_PATCH});
-    std.debug.print("  Min Zig: {s}\n\n", .{args.MINIMUM_ZIG_VERSION});
 
     // Method 1: Disable update checking globally
     std.debug.print("Method 1: Global disable\n", .{});

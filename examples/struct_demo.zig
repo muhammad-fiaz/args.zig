@@ -12,8 +12,8 @@ const Config = struct {
     // Options (Optional = not required)
     output: ?[]const u8,
 
-    // Required Option (Non-Optional)
-    count: i32,
+    // Required Option (Non-Optional, default 10 if omitted)
+    count: i32 = 10,
 
     // Numeric Option
     timeout: ?f64,

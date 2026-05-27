@@ -50,3 +50,4 @@ benchmark-results.md
 .env
 .env.local
 .env.*.local
+zig-pkg

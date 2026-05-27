@@ -20,10 +20,10 @@ This guide will help you get started with args.zig in your Zig project.
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.6):
+Install the latest stable release (v0.0.7):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.6.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
 ```
 
 Install the supported release for zig v0.15 (v0.0.4):
@@ -40,9 +40,20 @@ Install the latest development version:
 zig fetch --save git+https://github.com/muhammad-fiaz/args.zig
 ```
 
-### Configure build.zig
+### Configure build.zig (Release / Nightly)
 
-Add the dependency to your executable in `build.zig`:
+After running `zig fetch --save`, your `build.zig.zon` will have a dependency entry like:
+
+```zon
+.dependencies = .{
+    .args = .{
+        .url = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz",
+        .hash = "...",
+    },
+},
+```
+
+Now configure your `build.zig` to import the `args` module into your executable:
 
 ```zig
 const std = @import("std");
@@ -51,24 +62,106 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Add args.zig dependency
+    // 1. Add args.zig as a dependency
     const args_dep = b.dependency("args", .{
         .target = target,
         .optimize = optimize,
     });
 
+    // 2. Create your executable
     const exe = b.addExecutable(.{
-        .name = "myapp",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .name = "my-cli-app",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
-    // Import args module
+    // 3. Import the args module into your executable
     exe.root_module.addImport("args", args_dep.module("args"));
 
+    // 4. Install and optionally add a run step
     b.installArtifact(exe);
+
+    const run_exe = b.addRunArtifact(exe);
+    run_exe.step.dependOn(&b.installArtifact(exe).step);
+    if (b.args) |args| run_exe.addArgs(args);
+
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_exe.step);
 }
+```
+
+> [!IMPORTANT]
+> - The dependency **name** in `b.dependency("args", ...)` must match the key in `build.zig.zon` (`.args = ...`).
+> - The **module name** passed to `addImport("args", ...)` is what you use in your source code: `const args = @import("args");`.
+> - `zig fetch --save` automatically adds the dependency to `build.zig.zon`. You only need to write the `build.zig` code manually.
+
+### Verifying the Installation
+
+Create a minimal `src/main.zig`:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "my-cli-app",
+        .version = "1.0.0",
+        .description = "My CLI application",
+    });
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v', .help = "Enable verbose output" });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    if (result.getBool("verbose") orelse false) {
+        std.debug.print("Verbose mode enabled\n", .{});
+    }
+}
+```
+
+Run it:
+
+```bash
+zig build run -- --help
+zig build run -- -v
+```
+
+### Configuration Presets
+
+Choose a preset that matches your environment:
+
+```zig
+// Development - balanced defaults with colors (default)
+var parser = try args.ArgumentParser.init(allocator, .{
+    .name = "myapp",
+    .config = args.Config.development(),
+});
+
+// CI - no colors, explicit exit on error
+var parser2 = try args.ArgumentParser.init(allocator, .{
+    .name = "myapp",
+    .config = args.Config.ci(),
+});
+
+// Production - minimal overhead, no colors, no update checker
+var parser3 = try args.ArgumentParser.init(allocator, .{
+    .name = "myapp",
+    .config = args.Config.production(),
+});
+
+// Testing - silent errors, permissive parsing
+var parser4 = try args.ArgumentParser.init(allocator, .{
+    .name = "myapp",
+    .config = args.Config.testing(),
+});
 ```
 
 ## Your First Parser
@@ -228,23 +321,12 @@ For full runtime test execution on Linux/macOS targets, run `zig build test -Dta
 
 ## Version Information
 
-You can access version information in your code:
+You can access the library version in your code:
 
 ```zig
 const args = @import("args");
 
-// Library version
 std.debug.print("args.zig version: {s}\n", .{args.VERSION});
-
-// Version components
-std.debug.print("Major: {d}, Minor: {d}, Patch: {d}\n", .{
-    args.VERSION_MAJOR,
-    args.VERSION_MINOR,
-    args.VERSION_PATCH,
-});
-
-// Minimum Zig version
-std.debug.print("Requires Zig: {s}+\n", .{args.MINIMUM_ZIG_VERSION});
 ```
 
 ## Enabling Update Checker
@@ -264,10 +346,82 @@ var parser = try args.ArgumentParser.init(allocator, .{
 
 See [Update Checker Configuration](/guide/updates) for more details.
 
+## Error Handling & Fallbacks
+
+args.zig provides multiple levels of error handling to suit different needs:
+
+### Automatic Exit on Error (Default)
+
+By default, when a required argument is missing or an unknown option is provided, the parser prints a helpful error message and exits gracefully:
+
+```zig
+var parser = try args.ArgumentParser.init(allocator, .{ .name = "myapp" });
+try parser.addOption("input", .{ .required = true });
+
+// If --input is missing, the library prints help and exits with code 1
+var result = try parser.parseProcess(init); // never returns on error
+```
+
+This behavior is controlled by `exit_on_error` in the config (enabled by default).
+
+### Parse-Level Fallback (parseOr / parseProcessOr)
+
+Use `parseOr` or `parseProcessOr` when you want to handle errors yourself instead of exiting:
+
+```zig
+// Returns an empty ParseResult instead of propagating the error
+var result = parser.parseProcessOr(init, null);
+defer result.deinit();
+
+// With a custom error handler
+fn onError(err: anyerror, parser: *ArgumentParser) void {
+    std.debug.print("Parsing failed: {}\n", .{err});
+}
+var result2 = parser.parseProcessOr(init, onError);
+defer result2.deinit();
+```
+
+### Value-Level Fallback (getOr* Methods)
+
+For individual argument values, use the `getOr*` family of methods to provide inline defaults:
+
+```zig
+const verbose = result.getOrBool("verbose", false);
+const count = result.getOrInt("count", 42);
+const output = result.getOrString("output", "default.txt");
+const threshold = result.getOrFloat("threshold", 0.5);
+const workers = result.getOrUint("workers", 4);
+```
+
+### Environment Variable Fallback
+
+Options can fall back to environment variables automatically:
+
+```zig
+try parser.addOption("token", .{
+    .help = "API token",
+    .env_var = "API_TOKEN", // Falls back to $API_TOKEN if not provided on CLI
+});
+```
+
+### Custom Validator Error Handling
+
+Validators return detailed error messages that are integrated with the parser's error output:
+
+```zig
+try parser.addIntOption("port", .{
+    .min = 1024,
+    .max = 65535,
+    .help = "Port number (1024-65535)",
+    .required = true,
+});
+```
+
 ## Next Steps
 
 - Learn about [Options and Flags](/guide/options-flags)
 - Try [Declarative Structs](/guide/declarative-structs) for rapid prototyping
 - Explore [Subcommands](/guide/subcommands)
 - Configure [Environment Variables](/guide/environment-variables)
-- Check the [API Reference](/api/parser)
+- Understand [Error Handling & Fallbacks](#error-handling--fallbacks) above
+- Check the [API Reference](/api/parser) for full method documentation

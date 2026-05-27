@@ -496,7 +496,7 @@ pub fn validateKeyValuePair(value: []const u8) bool {
 
 fn ensureAllowedExtension(value: []const u8, allowed_extensions: []const []const u8, case_sensitive: bool) ValidationResult {
     if (hasAnyExtension(value, allowed_extensions, case_sensitive)) return .{ .ok = {} };
-    return .{ .err = "file extension is not allowed" };
+    return .{ .err = constants.ValidationMessages.extension_not_allowed };
 }
 
 fn ensureLength(value: []const u8, min_len: ?usize, max_len: ?usize, msg: []const u8) ValidationResult {
@@ -543,13 +543,13 @@ pub const ValidatorFn = *const fn (std.Io, []const u8) ValidationResult;
 pub const Validators = struct {
     pub fn nonEmpty(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (value.len > 0) .{ .ok = {} } else .{ .err = "value cannot be empty" };
+        return if (value.len > 0) .{ .ok = {} } else .{ .err = constants.ValidationMessages.cannot_be_empty };
     }
 
     pub fn alphanumeric(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         for (value) |c| {
-            if (!std.ascii.isAlphanumeric(c)) return .{ .err = "value must be alphanumeric" };
+            if (!std.ascii.isAlphanumeric(c)) return .{ .err = constants.ValidationMessages.must_be_alphanumeric };
         }
         return .{ .ok = {} };
     }
@@ -557,119 +557,119 @@ pub const Validators = struct {
     pub fn numeric(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         for (value) |c| {
-            if (!std.ascii.isDigit(c)) return .{ .err = "value must be numeric" };
+            if (!std.ascii.isDigit(c)) return .{ .err = constants.ValidationMessages.must_be_numeric };
         }
         return .{ .ok = {} };
     }
 
     pub fn emailAddress(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateEmailAddress(value)) .{ .ok = {} } else .{ .err = "invalid email address" };
+        return if (validateEmailAddress(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_email };
     }
 
     pub fn httpUrl(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateHttpUrl(value)) .{ .ok = {} } else .{ .err = "invalid URL (expected http/https)" };
+        return if (validateHttpUrl(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_url };
     }
 
     pub fn ipv4(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateIPv4Address(value)) .{ .ok = {} } else .{ .err = "invalid IPv4 address" };
+        return if (validateIPv4Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ipv4 };
     }
 
     pub fn ipv6(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateIPv6Address(value)) .{ .ok = {} } else .{ .err = "invalid IPv6 address" };
+        return if (validateIPv6Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ipv6 };
     }
 
     pub fn ipAny(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateIPv4Address(value) or validateIPv6Address(value)) .{ .ok = {} } else .{ .err = "invalid IP address" };
+        return if (validateIPv4Address(value) or validateIPv6Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ip };
     }
 
     pub fn uuid(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateUuid(value)) .{ .ok = {} } else .{ .err = "invalid UUID" };
+        return if (validateUuid(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_uuid };
     }
 
     pub fn isoDate(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateIsoDate(value)) .{ .ok = {} } else .{ .err = "invalid date (expected YYYY-MM-DD)" };
+        return if (validateIsoDate(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_iso_date };
     }
 
     pub fn isoDateTime(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateIsoDateTime(value)) .{ .ok = {} } else .{ .err = "invalid date-time (expected YYYY-MM-DDTHH:MM:SS[Z])" };
+        return if (validateIsoDateTime(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_iso_datetime };
     }
 
     pub fn json(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateJsonValue(value)) .{ .ok = {} } else .{ .err = "invalid JSON" };
+        return if (validateJsonValue(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_json };
     }
 
     pub fn year(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateYear(value)) .{ .ok = {} } else .{ .err = "invalid year (expected YYYY)" };
+        return if (validateYear(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_year };
     }
 
     pub fn time(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateTime24(value)) .{ .ok = {} } else .{ .err = "invalid time (expected HH:MM or HH:MM:SS)" };
+        return if (validateTime24(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_time };
     }
 
     pub fn hostname(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateHostName(value)) .{ .ok = {} } else .{ .err = "invalid hostname" };
+        return if (validateHostName(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_hostname };
     }
 
     pub fn port(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validatePort(value)) .{ .ok = {} } else .{ .err = "invalid port (expected 1..65535)" };
+        return if (validatePort(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_port };
     }
 
     pub fn hexColor(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateHexColor(value)) .{ .ok = {} } else .{ .err = "invalid hex color (expected #RGB, #RRGGBB, #RGBA, or #RRGGBBAA)" };
+        return if (validateHexColor(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_hex_color };
     }
 
     pub fn semver(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateSemver(value)) .{ .ok = {} } else .{ .err = "invalid semantic version (expected MAJOR.MINOR.PATCH)" };
+        return if (validateSemver(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_semver };
     }
 
     pub fn base64(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateBase64(value)) .{ .ok = {} } else .{ .err = "invalid base64 string" };
+        return if (validateBase64(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_base64 };
     }
 
     pub fn macAddress(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateMacAddress(value)) .{ .ok = {} } else .{ .err = "invalid MAC address (expected XX:XX:XX:XX:XX:XX)" };
+        return if (validateMacAddress(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_mac };
     }
 
     pub fn asciiOnlyStr(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateAsciiOnly(value)) .{ .ok = {} } else .{ .err = "value must contain only ASCII characters" };
+        return if (validateAsciiOnly(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.ascii_only };
     }
 
     pub fn lowercase(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateLowercase(value)) .{ .ok = {} } else .{ .err = "value must be lowercase" };
+        return if (validateLowercase(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.must_be_lowercase };
     }
 
     pub fn uppercase(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateUppercase(value)) .{ .ok = {} } else .{ .err = "value must be uppercase" };
+        return if (validateUppercase(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.must_be_uppercase };
     }
 
     pub fn endpoint(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateEndpoint(value)) .{ .ok = {} } else .{ .err = "invalid endpoint (expected host:port)" };
+        return if (validateEndpoint(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_endpoint };
     }
 
     pub fn keyValuePair(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateKeyValuePair(value)) .{ .ok = {} } else .{ .err = "invalid key=value pair" };
+        return if (validateKeyValuePair(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_kv_pair };
     }
 
     pub fn intRange(comptime min: ?i64, comptime max: ?i64) ValidatorFn {
@@ -678,8 +678,8 @@ pub const Validators = struct {
                 _ = io;
                 _ = parseIntInRange(i64, value, min, max) catch |err| {
                     return switch (err) {
-                        error.InvalidValue => .{ .err = "invalid integer" },
-                        error.OutOfRange => .{ .err = "integer is out of range" },
+                        error.InvalidValue => .{ .err = constants.ValidationMessages.invalid_int },
+                        error.OutOfRange => .{ .err = constants.ValidationMessages.int_out_of_range },
                     };
                 };
                 return .{ .ok = {} };
@@ -691,8 +691,8 @@ pub const Validators = struct {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
                 _ = io;
-                const parsed = std.fmt.parseInt(u64, value, 10) catch return .{ .err = "invalid unsigned integer" };
-                if (parsed < min or parsed > max) return .{ .err = "unsigned integer is out of range" };
+                const parsed = std.fmt.parseInt(u64, value, 10) catch return .{ .err = constants.ValidationMessages.invalid_uint };
+                if (parsed < min or parsed > max) return .{ .err = constants.ValidationMessages.uint_out_of_range };
                 return .{ .ok = {} };
             }
         }.validate;
@@ -704,8 +704,8 @@ pub const Validators = struct {
                 _ = io;
                 _ = parseFloatInRange(value, min, max) catch |err| {
                     return switch (err) {
-                        error.InvalidValue => .{ .err = "invalid float" },
-                        error.OutOfRange => .{ .err = "float is out of range" },
+                        error.InvalidValue => .{ .err = constants.ValidationMessages.invalid_float },
+                        error.OutOfRange => .{ .err = constants.ValidationMessages.float_out_of_range },
                     };
                 };
                 return .{ .ok = {} };
@@ -714,35 +714,25 @@ pub const Validators = struct {
     }
 
     pub fn pathExists(io: std.Io, value: []const u8) ValidationResult {
-        return if (validatePathExists(io, value)) .{ .ok = {} } else .{ .err = "path does not exist" };
+        return if (validatePathExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.path_not_exist };
     }
 
     pub fn absolutePath(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateAbsolutePath(value)) .{ .ok = {} } else .{ .err = "path must be absolute" };
+        return if (validateAbsolutePath(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.path_must_be_absolute };
     }
 
     pub fn fileExists(io: std.Io, value: []const u8) ValidationResult {
-        return if (validateFileExists(io, value)) .{ .ok = {} } else .{ .err = "file does not exist" };
+        return if (validateFileExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.file_not_exist };
     }
 
     pub fn directoryExists(io: std.Io, value: []const u8) ValidationResult {
-        return if (validateDirectoryExists(io, value)) .{ .ok = {} } else .{ .err = "directory does not exist" };
+        return if (validateDirectoryExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.dir_not_exist };
     }
 
     pub fn fileNameSafe(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
-        return if (validateFileName(value)) .{ .ok = {} } else .{ .err = "invalid file name" };
-    }
-
-    /// Creates a validator for file name length.
-    pub fn fileNameLength(comptime min_len: usize, comptime max_len: usize) ValidatorFn {
-        return struct {
-            fn validate(io: std.Io, value: []const u8) ValidationResult {
-                _ = io;
-                return ensureLength(value, min_len, max_len, "file name length is out of range");
-            }
-        }.validate;
+        return if (validateFileName(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_file_name };
     }
 
     /// Creates a validator for character length range.
@@ -751,7 +741,7 @@ pub const Validators = struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
                 _ = io;
                 if (value.len < min_len or value.len > max_len) {
-                    return .{ .err = "character length is out of range" };
+                    return .{ .err = constants.ValidationMessages.char_length_out_of_range };
                 }
                 return .{ .ok = {} };
             }
@@ -771,14 +761,14 @@ pub const Validators = struct {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
                 _ = io;
-                if (!validateFileName(value)) return .{ .err = "invalid file name" };
+                if (!validateFileName(value)) return .{ .err = constants.ValidationMessages.invalid_file_name };
 
                 if (allowed_extensions.len > 0) {
                     const extension_result = ensureAllowedExtension(value, allowed_extensions, case_sensitive_extensions);
                     if (!extension_result.isOk()) return extension_result;
                 }
 
-                const length_result = ensureLength(value, min_len, max_len, "file name length is out of range");
+                const length_result = ensureLength(value, min_len, max_len, constants.ValidationMessages.file_name_length_out_of_range);
                 if (!length_result.isOk()) return length_result;
 
                 return .{ .ok = {} };
@@ -800,7 +790,7 @@ pub const Validators = struct {
     pub fn existingFileWithExtension(comptime allowed_extensions: []const []const u8, comptime case_sensitive: bool) ValidatorFn {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
-                if (!validateFileExists(io, value)) return .{ .err = "file does not exist" };
+                if (!validateFileExists(io, value)) return .{ .err = constants.ValidationMessages.file_not_exist };
                 return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
             }
         }.validate;
@@ -811,7 +801,7 @@ pub const Validators = struct {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
                 _ = io;
-                if (!validateFileName(value)) return .{ .err = "invalid file name" };
+                if (!validateFileName(value)) return .{ .err = constants.ValidationMessages.invalid_file_name };
                 return ensureAllowedExtension(value, allowed_extensions, case_sensitive);
             }
         }.validate;
@@ -838,7 +828,7 @@ pub const Validators = struct {
                     const res = validator(io, value);
                     if (res.isOk()) return .{ .ok = {} };
                 }
-                return .{ .err = "value did not satisfy any validator" };
+                return .{ .err = constants.ValidationMessages.no_validator_matched };
             }
         }.validate;
     }
@@ -1110,12 +1100,28 @@ test "validateChoice" {
 
 test "parseBool" {
     try std.testing.expectEqual(@as(?bool, true), parseBool("true"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("True"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("TRUE"));
     try std.testing.expectEqual(@as(?bool, true), parseBool("yes"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("Yes"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("YES"));
     try std.testing.expectEqual(@as(?bool, true), parseBool("1"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("on"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("On"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("ON"));
     try std.testing.expectEqual(@as(?bool, false), parseBool("false"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("False"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("FALSE"));
     try std.testing.expectEqual(@as(?bool, false), parseBool("no"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("No"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("NO"));
     try std.testing.expectEqual(@as(?bool, false), parseBool("0"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("off"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("Off"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("OFF"));
     try std.testing.expectEqual(@as(?bool, null), parseBool("maybe"));
+    try std.testing.expectEqual(@as(?bool, null), parseBool("invalid"));
+    try std.testing.expectEqual(@as(?bool, null), parseBool(""));
 }
 
 test "validateRange" {
@@ -1181,7 +1187,7 @@ test "Validators.fileNameWithExtensions" {
 test "Validators.allOf and anyOf" {
     const valid_name = Validators.allOf(&[_]ValidatorFn{
         Validators.fileNameSafe,
-        Validators.fileNameLength(3, 32),
+        Validators.charRange(3, 32),
     });
     try std.testing.expect(valid_name(std.Io.failing, "cfg.json").isOk());
     try std.testing.expect(!valid_name(std.Io.failing, "a").isOk());

@@ -196,3 +196,59 @@ constants.TypeNames.byte_size            // "SIZE"
 constants.TypeNames.default_duration     // "0s"
 constants.TypeNames.default_size         // "0"
 ```
+
+### 12. `ValidationMessages`
+
+User-facing error messages returned by built-in validators:
+
+```zig
+constants.ValidationMessages.invalid_email              // "invalid email address"
+constants.ValidationMessages.invalid_url                // "invalid URL (expected http/https)"
+constants.ValidationMessages.invalid_ipv4               // "invalid IPv4 address"
+constants.ValidationMessages.invalid_ipv6               // "invalid IPv6 address"
+constants.ValidationMessages.invalid_uuid               // "invalid UUID"
+constants.ValidationMessages.invalid_iso_date           // "invalid date (expected YYYY-MM-DD)"
+constants.ValidationMessages.invalid_json               // "invalid JSON"
+constants.ValidationMessages.invalid_hex_color          // "invalid hex color (expected #RGB, #RRGGBB, ...)"
+constants.ValidationMessages.invalid_semver             // "invalid semantic version (expected MAJOR.MINOR.PATCH)"
+constants.ValidationMessages.invalid_base64             // "invalid base64 string"
+constants.ValidationMessages.invalid_mac                // "invalid MAC address (expected XX:XX:XX:XX:XX:XX)"
+constants.ValidationMessages.invalid_file_name          // "invalid file name"
+constants.ValidationMessages.file_not_exist             // "file does not exist"
+constants.ValidationMessages.dir_not_exist              // "directory does not exist"
+constants.ValidationMessages.path_not_exist             // "path does not exist"
+constants.ValidationMessages.invalid_endpoint           // "invalid endpoint (expected host:port)"
+constants.ValidationMessages.invalid_kv_pair            // "invalid key=value pair"
+constants.ValidationMessages.must_be_alphanumeric       // "value must be alphanumeric"
+constants.ValidationMessages.must_be_numeric            // "value must be numeric"
+constants.ValidationMessages.invalid_int                // "invalid integer"
+constants.ValidationMessages.int_out_of_range           // "integer is out of range"
+```
+
+### 13. `HelpFormat`
+
+Format strings and labels used in help text generation:
+
+```zig
+// Reusable format strings
+constants.HelpFormat.options_tag             // " [OPTIONS]"
+constants.HelpFormat.command_tag             // " <COMMAND>"
+constants.HelpFormat.required_annotation     // " [required]"
+constants.HelpFormat.choices_format          // " [choices: "
+constants.HelpFormat.choices_close           // "]"
+constants.HelpFormat.default_label           // " [default: "
+constants.HelpFormat.env_label               // " [env: "
+constants.HelpFormat.negate_label            // " [negate: --no-"
+constants.HelpFormat.close_bracket           // "]"
+```
+
+### 15. `UpdateNotification`
+
+Banner format strings displayed when a new version is available:
+
+```zig
+constants.UpdateNotification.top_border      // "╭───────────────────────────────────────╮\n"
+constants.UpdateNotification.message_line    // "│  A new version of ... available: ...  │\n"
+constants.UpdateNotification.command_line    // "│  Run: zig fetch --save ...           │\n"
+constants.UpdateNotification.bottom_border   // "╰───────────────────────────────────────╯\n"
+```

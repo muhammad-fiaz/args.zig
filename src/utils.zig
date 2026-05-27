@@ -2,6 +2,7 @@
 //! Provides optimized string operations, memory helpers, and ANSI colors.
 
 const std = @import("std");
+const types = @import("types.zig");
 
 /// Fast string equality check.
 pub inline fn eql(a: []const u8, b: []const u8) bool {
@@ -374,6 +375,71 @@ pub fn toKebabCase(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
     return result;
 }
 
+/// Result of parsing a bracket-delimited list.
+pub const BracketListResult = struct {
+    items: []const []const u8,
+    bracket_type: types.BracketType,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *BracketListResult) void {
+        for (self.items) |item| self.allocator.free(item);
+        self.allocator.free(self.items);
+    }
+};
+
+/// Detect if a string is bracket-delimited and return the bracket type.
+pub fn detectBracket(value: []const u8) types.BracketType {
+    if (value.len < 2) return .none;
+    return types.BracketType.detect(value[0]);
+}
+
+/// Strip matching brackets from a string. Returns the inner content or null.
+pub fn stripBrackets(value: []const u8) ?[]const u8 {
+    const bt = detectBracket(value);
+    const close = bt.closing() orelse return null;
+    if (value[value.len - 1] != close) return null;
+    return value[1 .. value.len - 1];
+}
+
+/// Parse a bracket-delimited list value like `{a,b,c}`, `[a,b,c]`, `<a,b,c>`.
+/// Returns the parsed items and the detected bracket type.
+/// If the value is not bracket-delimited, returns the single item as a list of one.
+pub fn parseBracketedList(allocator: std.mem.Allocator, value: []const u8, separator: u8) !BracketListResult {
+    const inner = stripBrackets(value) orelse {
+        // Not bracket-delimited — treat as single item
+        const item = try allocator.dupe(u8, std.mem.trim(u8, value, " "));
+        const items = try allocator.alloc([]const u8, 1);
+        items[0] = item;
+        return .{ .items = items, .bracket_type = .none, .allocator = allocator };
+    };
+
+    const bt = detectBracket(value);
+
+    // Count items
+    var count: usize = 0;
+    {
+        var it = std.mem.splitScalar(u8, inner, separator);
+        while (it.next()) |part| {
+            if (std.mem.trim(u8, part, " \t").len > 0) count += 1;
+        }
+    }
+
+    const items = try allocator.alloc([]const u8, count);
+    errdefer allocator.free(items);
+
+    var idx: usize = 0;
+    var it = std.mem.splitScalar(u8, inner, separator);
+    while (it.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, " \t");
+        if (trimmed.len > 0) {
+            items[idx] = try allocator.dupe(u8, trimmed);
+            idx += 1;
+        }
+    }
+
+    return .{ .items = items[0..idx], .bracket_type = bt, .allocator = allocator };
+}
+
 test "eql" {
     try std.testing.expect(eql("hello", "hello"));
     try std.testing.expect(!eql("hello", "world"));
@@ -391,11 +457,36 @@ test "startsWith and endsWith" {
 
 test "parseBool" {
     try std.testing.expectEqual(@as(?bool, true), parseBool("true"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("True"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("TRUE"));
     try std.testing.expectEqual(@as(?bool, true), parseBool("1"));
     try std.testing.expectEqual(@as(?bool, true), parseBool("yes"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("Yes"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("YES"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("y"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("Y"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("t"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("T"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("on"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("On"));
+    try std.testing.expectEqual(@as(?bool, true), parseBool("ON"));
     try std.testing.expectEqual(@as(?bool, false), parseBool("false"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("False"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("FALSE"));
     try std.testing.expectEqual(@as(?bool, false), parseBool("0"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("no"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("No"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("NO"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("n"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("N"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("f"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("F"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("off"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("Off"));
+    try std.testing.expectEqual(@as(?bool, false), parseBool("OFF"));
     try std.testing.expectEqual(@as(?bool, null), parseBool("invalid"));
+    try std.testing.expectEqual(@as(?bool, null), parseBool("maybe"));
+    try std.testing.expectEqual(@as(?bool, null), parseBool(""));
 }
 
 test "editDistance" {

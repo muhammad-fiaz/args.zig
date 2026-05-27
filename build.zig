@@ -47,12 +47,16 @@ pub fn build(b: *std.Build) void {
         .{ .name = "duration_size", .path = "examples/duration_size.zig" },
         .{ .name = "subcommand_range", .path = "examples/subcommand_range.zig" },
         .{ .name = "update_check", .path = "examples/update_check.zig", .skip_run_all = true },
+        .{ .name = "bracketed_list", .path = "examples/bracketed_list.zig" },
+        .{ .name = "format_option", .path = "examples/format_option.zig" },
+        .{ .name = "fallback_parse", .path = "examples/fallback_parse.zig" },
+        .{ .name = "append_option", .path = "examples/append_option.zig" },
+        .{ .name = "multi_value", .path = "examples/multi_value.zig" },
+        .{ .name = "bool_options", .path = "examples/bool_options.zig" },
     };
 
     // Create run-all-examples step that runs all examples sequentially
     const run_all_examples = b.step("run-all-examples", "Run all examples sequentially");
-
-    var previous_step: ?*std.Build.Step = null;
 
     // Build examples in smaller batches to avoid OOM
     inline for (examples) |example| {
@@ -74,12 +78,6 @@ pub fn build(b: *std.Build) void {
 
         const install_exe = b.addInstallArtifact(exe, .{});
 
-        // Serialize example builds to avoid OOM under parallel job runs
-        if (previous_step) |prev| {
-            install_exe.step.dependOn(prev);
-        }
-        previous_step = &install_exe.step;
-
         const example_step = b.step("example-" ++ example.name, "Build " ++ example.name ++ " example");
         example_step.dependOn(&install_exe.step);
 
@@ -90,10 +88,6 @@ pub fn build(b: *std.Build) void {
 
         const run_step = b.step("run-" ++ example.name, "Run " ++ example.name ++ " example");
         run_step.dependOn(&run_exe.step);
-
-        if (!example.skip_run_all) {
-            run_all_examples.dependOn(run_step);
-        }
     }
 
     // Unit tests
@@ -111,6 +105,9 @@ pub fn build(b: *std.Build) void {
     }
 
     const run_tests = b.addRunArtifact(tests);
+    if (b.args) |args| {
+        run_tests.addArgs(args);
+    }
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
 
@@ -133,6 +130,9 @@ pub fn build(b: *std.Build) void {
     const install_bench = b.addInstallArtifact(bench_exe, .{});
     const run_bench = b.addRunArtifact(bench_exe);
     run_bench.step.dependOn(&install_bench.step);
+    if (b.args) |args| {
+        run_bench.addArgs(args);
+    }
 
     const bench_step = b.step("bench", "Run benchmarks");
     bench_step.dependOn(&run_bench.step);

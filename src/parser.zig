@@ -36,10 +36,14 @@ pub const Parser = struct {
 
     /// Initializes a new parser instance with the given specification.
     pub fn init(allocator: std.mem.Allocator, spec: CommandSpec, io: std.Io, env_map: ?*const std.process.Environ.Map) !Parser {
+        return initWithConfig(allocator, spec, io, env_map, config_mod.getConfig());
+    }
+
+    pub fn initWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, io: std.Io, env_map: ?*const std.process.Environ.Map, cfg: config_mod.Config) !Parser {
         var self = Parser{
             .allocator = allocator,
             .spec = spec,
-            .cfg = config_mod.getConfig(),
+            .cfg = cfg,
             .io = io,
             .env_map = env_map,
             .short_map = std.AutoHashMap(u8, *const ArgSpec).init(allocator),
@@ -419,8 +423,20 @@ pub const Parser = struct {
                 }
             }
 
-            if (group.exclusive and found_count > 1) return errors.ParseError.MutuallyExclusive;
-            if (group.required and found_count == 0) return errors.ParseError.MissingRequired;
+            if (group.exclusive and found_count > 1) {
+                self.emitError(constants.HelpFormat.group_exclusive_error, .{group.name});
+                if (self.cfg.exit_on_error) std.process.exit(1);
+                return errors.ParseError.MutuallyExclusive;
+            }
+            if (group.required and found_count == 0) {
+                if (self.cfg.exit_on_error) {
+                    const help_text = help.generateHelpWithConfig(self.allocator, self.spec, self.cfg.use_colors, self.cfg) catch std.process.exit(1);
+                    std.debug.print("{s}", .{help_text});
+                    self.allocator.free(help_text);
+                    std.process.exit(1);
+                }
+                return errors.ParseError.MissingRequired;
+            }
         }
     }
 
@@ -471,7 +487,7 @@ pub const Parser = struct {
                 return;
             }
             if (!is_short and utils.eql(name, constants.Builtins.version)) {
-                std.debug.print("{s} {s}\n", .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
+                std.debug.print(constants.HelpFormat.version_format, .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
                 if (self.cfg.exit_on_error) std.process.exit(0);
                 return;
             }
@@ -483,7 +499,7 @@ pub const Parser = struct {
                 return;
             }
             if (is_short and name[0] == 'V') {
-                std.debug.print("{s} {s}\n", .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
+                std.debug.print(constants.HelpFormat.version_format, .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
                 if (self.cfg.exit_on_error) std.process.exit(0);
                 return;
             }
@@ -564,84 +580,96 @@ pub const Parser = struct {
                 try result.put(dest, .{ .boolean = true });
             },
             .store, .append => {
-                const next = tokenizer.peek();
-                if (next.token_type != .value) return errors.ParseError.MissingValue;
-                _ = tokenizer.next();
-                const decoded = self.decodeInputForSpec(spec, next.raw) catch {
-                    if (spec.custom_error_message) |custom| {
-                        self.emitError("{s}\n", .{custom});
-                    } else {
-                        self.emitError(constants.ParserMessages.decode_failed, .{spec.name});
-                    }
-                    return errors.ParseError.InvalidValue;
-                };
-                defer decoded.deinit(self.allocator);
-
-                const value = if (spec.value_type == .array and spec.separator != 0)
-                    try self.parseOwnedArrayValue(result, decoded.value, spec.separator)
-                else
-                    try self.parseOwnedValue(result, decoded.value, spec.value_type);
-                if (spec.validator) |v| {
-                    const res = v(self.io, decoded.value);
-                    if (!res.isOk()) {
-                        return errors.ValidationError.CustomValidationFailed;
-                    }
-                }
-                if (spec.choices.len > 0 and !self.validateChoiceWithCase(decoded.value, spec.choices)) {
-                    if (spec.custom_error_message) |custom| {
-                        self.emitError("{s}\n", .{custom});
-                    } else {
-                        self.emitError(constants.ParserMessages.invalid_choice, .{ decoded.value, spec.name });
-                    }
-                    self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.choices, "");
-                    return errors.ParseError.InvalidChoice;
-                }
-                if (spec.expect.len > 0) {
-                    if (!self.validateChoiceWithCase(decoded.value, spec.expect)) {
-                        if (self.cfg.parsing_mode == .strict) {
-                            if (spec.custom_error_message) |custom| {
-                                self.emitError("{s}\n", .{custom});
-                            } else {
-                                self.emitError(constants.ParserMessages.expected_one_of, .{ decoded.value, spec.name });
+                if (spec.nargs.isVariadic() and spec.action != .append) {
+                    const value = try self.parseVariadicValues(tokenizer, result, spec);
+                    if (spec.validator) |v| {
+                        if (value == .array and value.array.len > 0) {
+                            const res = v(self.io, value.array[0]);
+                            if (!res.isOk()) {
+                                if (res.getMessage()) |msg| self.emitError("{s}\n", .{msg});
+                                return errors.ValidationError.CustomValidationFailed;
                             }
-                            if (!self.cfg.silent_errors) {
-                                if (spec.custom_error_message == null) {
-                                    for (spec.expect, 0..) |expected_val, i| {
-                                        std.debug.print("'{s}'", .{expected_val});
-                                        if (i < spec.expect.len - 1) std.debug.print(", ", .{});
-                                    }
-                                    std.debug.print("\n", .{});
-                                }
-                            }
-                            self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.expect, "");
-                            if (self.cfg.exit_on_error) std.process.exit(1);
-                            return errors.ParseError.InvalidValue;
-                        } else {
-                            // Warning mode
-                            if (spec.custom_error_message) |custom| {
-                                self.emitWarning("{s}\n", .{custom});
-                            } else {
-                                self.emitWarning(constants.ParserMessages.unexpected_value, .{ decoded.value, spec.name });
-                            }
-                            if (!self.cfg.silent_errors) {
-                                if (spec.custom_error_message == null) {
-                                    for (spec.expect, 0..) |expected_val, i| {
-                                        std.debug.print("'{s}'", .{expected_val});
-                                        if (i < spec.expect.len - 1) std.debug.print(", ", .{});
-                                    }
-                                    std.debug.print("\n", .{});
-                                }
-                            }
-                            self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.expect, "");
                         }
                     }
-                }
-
-                if (spec.action == .append) {
-                    try result.positionals.append(self.allocator, try self.copyAndTrackSlice(result, decoded.value));
-                } else {
                     try self.checkDuplicateArgument(spec, seen, dest);
                     try result.put(dest, value);
+                } else {
+                    const next = tokenizer.peek();
+                    if (next.token_type != .value) return errors.ParseError.MissingValue;
+                    _ = tokenizer.next();
+                    const decoded = self.decodeInputForSpec(spec, next.raw) catch {
+                        if (spec.custom_error_message) |custom| {
+                            self.emitError("{s}\n", .{custom});
+                        } else {
+                            self.emitError(constants.ParserMessages.decode_failed, .{spec.name});
+                        }
+                        return errors.ParseError.InvalidValue;
+                    };
+                    defer decoded.deinit(self.allocator);
+                    const value = if (spec.value_type == .array and spec.separator != 0)
+                        try self.parseOwnedArrayValue(result, decoded.value, spec.separator)
+                    else
+                        try self.parseOwnedValue(result, decoded.value, spec.value_type);
+                    if (spec.validator) |v| {
+                        const res = v(self.io, decoded.value);
+                        if (!res.isOk()) {
+                            return errors.ValidationError.CustomValidationFailed;
+                        }
+                    }
+                    if (spec.choices.len > 0 and !self.validateChoiceWithCase(decoded.value, spec.choices)) {
+                        if (spec.custom_error_message) |custom| {
+                            self.emitError("{s}\n", .{custom});
+                        } else {
+                            self.emitError(constants.ParserMessages.invalid_choice, .{ decoded.value, spec.name });
+                        }
+                        self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.choices, "");
+                        return errors.ParseError.InvalidChoice;
+                    }
+                    if (spec.expect.len > 0) {
+                        if (!self.validateChoiceWithCase(decoded.value, spec.expect)) {
+                            if (self.cfg.parsing_mode == .strict) {
+                                if (spec.custom_error_message) |custom| {
+                                    self.emitError("{s}\n", .{custom});
+                                } else {
+                                    self.emitError(constants.ParserMessages.expected_one_of, .{ decoded.value, spec.name });
+                                }
+                                if (!self.cfg.silent_errors) {
+                                    if (spec.custom_error_message == null) {
+                                        for (spec.expect, 0..) |expected_val, i| {
+                                            std.debug.print("'{s}'", .{expected_val});
+                                            if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                                        }
+                                        std.debug.print("\n", .{});
+                                    }
+                                }
+                                self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.expect, "");
+                                if (self.cfg.exit_on_error) std.process.exit(1);
+                                return errors.ParseError.InvalidValue;
+                            } else {
+                                if (spec.custom_error_message) |custom| {
+                                    self.emitWarning("{s}\n", .{custom});
+                                } else {
+                                    self.emitWarning(constants.ParserMessages.unexpected_value, .{ decoded.value, spec.name });
+                                }
+                                if (!self.cfg.silent_errors) {
+                                    if (spec.custom_error_message == null) {
+                                        for (spec.expect, 0..) |expected_val, i| {
+                                            std.debug.print("'{s}'", .{expected_val});
+                                            if (i < spec.expect.len - 1) std.debug.print(", ", .{});
+                                        }
+                                        std.debug.print("\n", .{});
+                                    }
+                                }
+                                self.emitClosestSuggestionWithArgHint(spec, decoded.value, spec.expect, "");
+                            }
+                        }
+                    }
+                    if (spec.action == .append) {
+                        try self.appendToResultArray(result, spec.getDestination(), decoded.value);
+                    } else {
+                        try self.checkDuplicateArgument(spec, seen, dest);
+                        try result.put(dest, value);
+                    }
                 }
             },
             .help => {
@@ -651,7 +679,7 @@ pub const Parser = struct {
                 if (self.cfg.exit_on_error) std.process.exit(0);
             },
             .version => {
-                std.debug.print("{s} {s}\n", .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
+                std.debug.print(constants.HelpFormat.version_format, .{ self.spec.name, self.spec.version orelse constants.Defaults.unknown_version });
                 if (self.cfg.exit_on_error) std.process.exit(0);
             },
             else => {},
@@ -816,9 +844,12 @@ pub const Parser = struct {
     }
 
     fn parseOwnedArrayValue(self: *Parser, result: *ParseResult, raw: []const u8, separator: u8) !ParsedValue {
+        // Strip brackets if enabled
+        const inner = if (self.cfg.allow_brackets) (utils.stripBrackets(raw) orelse raw) else raw;
+
         var count: usize = 0;
         {
-            var it = std.mem.splitScalar(u8, raw, separator);
+            var it = std.mem.splitScalar(u8, inner, separator);
             while (it.next()) |part| {
                 if (std.mem.trim(u8, part, " ").len > 0) count += 1;
             }
@@ -830,7 +861,7 @@ pub const Parser = struct {
         const buf: [][]const u8 = @ptrCast(@alignCast(raw_buf));
 
         var idx: usize = 0;
-        var it = std.mem.splitScalar(u8, raw, separator);
+        var it = std.mem.splitScalar(u8, inner, separator);
         while (it.next()) |part| {
             const trimmed = std.mem.trim(u8, part, " ");
             if (trimmed.len > 0) {
@@ -841,6 +872,67 @@ pub const Parser = struct {
 
         try result.ownSlice(raw_buf);
         return .{ .array = buf[0..count] };
+    }
+
+    /// Parse zero or more values into an array.
+    fn parseVariadicValues(self: *Parser, tokenizer: *Tokenizer, result: *ParseResult, spec: *const ArgSpec) !ParsedValue {
+        // First pass: count values
+        var count: usize = 0;
+        const nargs = spec.nargs;
+        const max = nargs.maxCount();
+        const is_remainder = nargs == .remainder;
+        var saved_indices: std.ArrayList(usize) = .empty;
+
+        while (true) {
+            if (max) |m| if (count >= m) break;
+            const next = tokenizer.peek();
+            if (next.token_type == .end or next.token_type == .separator) break;
+            if (!is_remainder and (next.token_type == .long_option or next.token_type == .short_option or next.token_type == .short_cluster or next.token_type == .option_with_value)) break;
+            _ = tokenizer.next();
+            try saved_indices.append(self.allocator, tokenizer.index - 1);
+            count += 1;
+        }
+
+        if (count < nargs.minCount()) {
+            return errors.ParseError.MissingValue;
+        }
+
+        // Allocate and collect values
+        const buf = try self.allocator.alloc(u8, count * @sizeOf([]const u8));
+        errdefer self.allocator.free(buf);
+        const items: [][]const u8 = @ptrCast(@alignCast(buf));
+
+        for (saved_indices.items, 0..) |idx, i| {
+            const decoded = if (self.cfg.allow_brackets)
+                (utils.stripBrackets(tokenizer.args[idx]) orelse tokenizer.args[idx])
+            else
+                tokenizer.args[idx];
+            items[i] = try self.copyAndTrackSlice(result, decoded);
+        }
+        saved_indices.deinit(self.allocator);
+
+        try result.ownSlice(buf);
+        return .{ .array = items[0..count] };
+    }
+
+    /// Append a value to an array in the result, creating the array if needed.
+    fn appendToResultArray(self: *Parser, result: *ParseResult, dest: []const u8, raw_value: []const u8) !void {
+        const owned = try self.copyAndTrackSlice(result, raw_value);
+        const old_arr = if (result.get(dest)) |existing|
+            if (existing == .array) existing.array else null
+        else
+            null;
+
+        const new_len = if (old_arr) |a| a.len + 1 else 1;
+        const raw_buf = try self.allocator.alloc(u8, new_len * @sizeOf([]const u8));
+        errdefer self.allocator.free(raw_buf);
+        const buf: [][]const u8 = @ptrCast(@alignCast(raw_buf));
+        if (old_arr) |a| {
+            for (a, 0..) |item, i| buf[i] = item;
+        }
+        buf[new_len - 1] = owned;
+        try result.ownSlice(raw_buf);
+        try result.put(dest, .{ .array = buf[0..new_len] });
     }
 
     fn findArgSpec(self: *const Parser, name: []const u8) ?ArgSpec {
@@ -859,6 +951,12 @@ pub const Parser = struct {
     fn validateRequired(self: *Parser, result: *ParseResult) !void {
         for (self.spec.args) |arg| {
             if (arg.required and !result.contains(arg.getDestination())) {
+                if (self.cfg.exit_on_error) {
+                    const help_text = help.generateHelpWithConfig(self.allocator, self.spec, self.cfg.use_colors, self.cfg) catch std.process.exit(1);
+                    std.debug.print("{s}", .{help_text});
+                    self.allocator.free(help_text);
+                    std.process.exit(1);
+                }
                 return errors.ParseError.MissingRequired;
             }
         }
@@ -1361,7 +1459,7 @@ test "Parser separator handling" {
 
 test "Parser argument groups exclusive" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{

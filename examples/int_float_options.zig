@@ -22,8 +22,10 @@ pub fn main(init: std.process.Init) !void {
 
     try parser.addIntOption("retries", .{
         .short = 'r',
-        .help = "Retry count",
+        .help = "Retry count (0–10)",
         .default = "3",
+        .min = 0,
+        .max = 10,
     });
 
     try parser.addUintOption("threads", .{
@@ -34,8 +36,10 @@ pub fn main(init: std.process.Init) !void {
 
     try parser.addFloatOption("threshold", .{
         .short = 's',
-        .help = "Confidence threshold",
+        .help = "Confidence threshold (0.0–1.0)",
         .default = "0.75",
+        .min = 0.0,
+        .max = 1.0,
     });
 
     try parser.addFloatOption("rate", .{

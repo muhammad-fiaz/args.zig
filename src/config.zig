@@ -37,6 +37,7 @@ pub const Config = struct {
     parsing_mode: types.ParsingMode = .strict,
     allow_short_clusters: bool = true,
     allow_inline_values: bool = true,
+    allow_brackets: bool = true,
     allow_interspersed: bool = true,
     allow_negated_flags: bool = true,
     case_sensitive: bool = true,

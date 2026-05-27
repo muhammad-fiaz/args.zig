@@ -686,7 +686,8 @@ pub fn main(init: std.process.Init) !void {
     });
 
     try parser.addIntOption("retries", .{
-        .short = 'r', .help = "Retry count", .default = "3",
+        .short = 'r', .help = "Retry count (0–10)", .default = "3",
+        .min = 0, .max = 10,
     });
 
     try parser.addUintOption("threads", .{
@@ -694,22 +695,83 @@ pub fn main(init: std.process.Init) !void {
     });
 
     try parser.addFloatOption("threshold", .{
-        .short = 'h', .help = "Confidence threshold", .default = "0.75",
+        .short = 'h', .help = "Confidence threshold (0.0–1.0)", .default = "0.75",
+        .min = 0.0, .max = 1.0,
     });
 
     var result = try parser.parseProcess(init);
     defer result.deinit();
 
     std.debug.print("count     = {d}\n", .{result.get("count").?.asInt().?});
-    std.debug.print("retries   = {d}\n", .{result.get("retries").?.asInt().?});
+    std.debug.print("retries   = {d} (range 0–10)\n", .{result.get("retries").?.asInt().?});
     std.debug.print("threads   = {d}\n", .{result.get("threads").?.asUint().?});
-    std.debug.print("threshold = {d:.2}\n", .{result.get("threshold").?.asFloat().?});
+    std.debug.print("threshold = {d:.2} (range 0.0–1.0)\n", .{result.get("threshold").?.asFloat().?});
 }
 ```
 
 **Usage:**
 ```bash
 numeric-demo --count 25 --retries 5 --threads 8 --threshold 0.95
+```
+
+## Bool Options Example
+
+Case-insensitive boolean option parsing — `TRUE`/`True`/`true`, `FALSE`/`False`/`false`, `YES`/`yes`, `NO`/`no`, `ON`/`on`, `OFF`/`off` and single-letter variants are all accepted:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "bool-demo",
+        .version = "1.0.0",
+        .description = "Demonstrates case-insensitive boolean option parsing",
+    });
+    defer parser.deinit();
+
+    try parser.addOption("enabled", .{
+        .short = 'e',
+        .help = "Enable feature (accepts: true/TRUE/True/yes/YES/on/ON/1)",
+        .value_type = .bool,
+        .default = "true",
+    });
+
+    try parser.addOption("debug", .{
+        .short = 'd',
+        .help = "Debug mode (accepts: false/FALSE/False/no/NO/off/OFF/0)",
+        .value_type = .bool,
+        .default = "false",
+    });
+
+    try parser.addFlag("flag", .{
+        .short = 'f',
+        .help = "Simple flag (no value needed)",
+    });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    const enabled = result.getBool("enabled") orelse true;
+    const debug = result.getBool("debug") orelse false;
+    const flag = result.getBool("flag") orelse false;
+
+    std.debug.print("enabled = {}  (type: bool)\n", .{enabled});
+    std.debug.print("debug   = {}  (type: bool)\n", .{debug});
+    std.debug.print("flag    = {}  (type: bool, store_true)\n", .{flag});
+}
+```
+
+**Usage:**
+```bash
+# All of these work the same way:
+zig build run-bool_options -- --enabled TRUE --debug false
+zig build run-bool_options -- -e True -d No
+zig build run-bool_options -- --enabled yes --debug OFF
+zig build run-bool_options -- --enabled 1 --debug 0
+zig build run-bool_options -- -f        # flag is store_true — no value needed
 ```
 
 ## Hex Decode Option Example
@@ -1020,6 +1082,185 @@ pub fn main() !void {
 }
 ```
 
+## Bracketed List Example
+
+Parse bracket-delimited inline lists as arrays:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "bracketed-list",
+        .version = "1.0.0",
+        .description = "Demonstrates bracket-delimited value parsing",
+    });
+    defer parser.deinit();
+
+    try parser.addBracketedListOption("tags", .{ .short = 't' });
+    try parser.addBracketedListOption("files", .{ .short = 'f', .bracket_type = .curly });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    if (result.getArray("tags")) |tags| {
+        for (tags, 0..) |tag, i| std.debug.print("  [{d}] {s}\n", .{ i, tag });
+    }
+    if (result.getArray("files")) |files| {
+        for (files, 0..) |f, i| std.debug.print("  [{d}] {s}\n", .{ i, f });
+    }
+}
+```
+
+**Usage:**
+```bash
+zig build run-bracketed_list -- --tags {a,b,c} --files {x,y}
+```
+
+## Format Option Example
+
+File format detection and extension helpers:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "format-demo",
+        .version = "1.0.0",
+    });
+    defer parser.deinit();
+
+    try parser.addFormatOption("input-format", .{ .short = 'f', .default = "json", .formats = &[_][]const u8{ "json", "yaml", "csv" } });
+    try parser.addExtensionOption("output-ext", .{ .short = 'o', .default = ".json", .extensions = &[_][]const u8{ ".json", ".yaml", ".csv" } });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    const fmt = result.getString("input-format") orelse "json";
+    const ext = result.getString("output-ext") orelse ".json";
+    std.debug.print("Format: {s} / Ext: {s}\n", .{ fmt, ext });
+}
+```
+
+**Usage:**
+```bash
+zig build run-format_option -- --input-format yaml --output-ext .yaml
+```
+
+## Fallback Parse Example
+
+Use `parseOr` / `parseProcessOr` with `getOr*` methods for graceful error recovery:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "fallback-demo",
+        .version = "1.0.0",
+    });
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v' });
+    try parser.addCounter("verbosity", .{ .short = 'd' });
+
+    // parseOr never fails — returns empty result on error
+    var result = parser.parseOr(&[_][]const u8{}, null);
+    defer result.deinit();
+
+    const verbose = result.getOrBool("verbose", false);
+    const counter = result.getOrCounter("verbosity", 0);
+
+    // parseProcessOr wraps parseProcess with fallback
+    var result2 = parser.parseProcessOr(init, null);
+    defer result2.deinit();
+
+    const name = result2.getOrString("name", "default");
+    std.debug.print("verbose={} counter={} name={s}\n", .{ verbose, counter, name });
+}
+```
+
+**Usage:**
+```bash
+zig build run-fallback_parse -- -v -ddd
+```
+
+## Append Option Example
+
+Repeated options stored as arrays:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "append-demo",
+        .version = "1.0.0",
+    });
+    defer parser.deinit();
+
+    try parser.addAppend("include", .{ .short = 'I', .metavar = "DIR" });
+    try parser.addOption("output", .{ .short = 'o', .default = "out" });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    if (result.getArray("include")) |paths| {
+        for (paths, 0..) |p, i| std.debug.print("  [{d}] {s}\n", .{ i, p });
+    }
+    std.debug.print("Output: {s}\n", .{result.getOrString("output", "out")});
+}
+```
+
+**Usage:**
+```bash
+zig build run-append_option -- -I src -I include -I lib -o result
+```
+
+## Multi-Value (n-args) Example
+
+Variadic argument collection using n-args:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "multi-value",
+        .version = "1.0.0",
+    });
+    defer parser.deinit();
+
+    // one_or_more: requires at least one value
+    try parser.addOption("source", .{ .short = 's', .nargs = .one_or_more });
+    try parser.addPositional("target", .{ .required = true });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    if (result.getArray("source")) |sources| {
+        for (sources, 0..) |src, i| std.debug.print("  [{d}] {s}\n", .{ i, src });
+    }
+    std.debug.print("Target: {s}\n", .{result.getOrString("target", "?")});
+}
+```
+
+**Usage:**
+```bash
+zig build run-multi_value -- --source a.txt b.txt c.txt ./output
+```
+
 ## Running the Examples
 
 Build and run examples with:
@@ -1030,6 +1271,9 @@ zig build
 
 # Run basic example
 zig build run-basic
+
+# Run bool options example
+zig build run-bool_options
 
 # Run advanced example
 zig build run-advanced

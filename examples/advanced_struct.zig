@@ -26,7 +26,6 @@ const CliConfig = struct {
     timeout: f64 = 30.0,
     host: []const u8 = "localhost",
     config_file: ?[]const u8 = null,
-    retries: u64 = 3,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -51,5 +50,4 @@ pub fn main(init: std.process.Init) !void {
     if (cfg.config_file) |f| {
         std.debug.print("  config-file = {s}\n", .{f});
     }
-    std.debug.print("  retries     = {d}\n", .{cfg.retries});
 }

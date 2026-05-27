@@ -77,17 +77,23 @@ A production-grade, high-performance command-line argument parsing library for Z
 - [**List Options**](https://muhammad-fiaz.github.io/args.zig/api/parser#addlistoption) - Comma-separated list values stored as arrays via `addListOption`
 - [**Secret Options**](https://muhammad-fiaz.github.io/args.zig/api/parser#addsecretoption) - Password/secret options hidden from help text
 - [**Extra Validators**](https://muhammad-fiaz.github.io/args.zig/guide/validation) - `hexColor`, `semver`, `base64`, `macAddress`, `asciiOnly`, `lowercase`, `uppercase`
-- [**ParseResult Extras**](https://muhammad-fiaz.github.io/args.zig/api/parser#parsersult) - `getUint`, `getArray`, `getEnum`, `getOrString`, `getOrInt`, `getOrBool`, `getOrFloat`, `getOrUint` methods on `ParseResult`
+- [**ParseResult Extras**](https://muhammad-fiaz.github.io/args.zig/api/parser#parsersult) - `getUint`, `getArray`, `getEnum`, `getOrString`, `getOrInt`, `getOrBool`, `getOrFloat`, `getOrUint`, `getOrCounter`, `getOrKeyValue` methods on `ParseResult`
 - [**Env Options**](https://muhammad-fiaz.github.io/args.zig/api/parser#addenvoption) - Automatic env var derivation via `addEnvOption`
-- [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage across all modules
+- [**Bracket-Delimited Lists**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#bracket-delimited-lists) - Parse `{a,b,c}`, `[a,b,c]`, `<a,b,c>` as arrays via `addBracketedListOption`
+- [**Multi-Value n-args**](https://muhammad-fiaz.github.io/args.zig/api/parser#multi-value-options) - Variadic argument collection via `addMultiple` with configurable min/max
+- [**Append Fix**](https://muhammad-fiaz.github.io/args.zig/api/parser#addappend) - Repeated options `-o a -o b` now store as proper arrays retrievable via `getArray()`
+- [**File Format Helpers**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#file-format-and-extension-helpers) - `addFormatOption`, `addExtensionOption` with explicit extension arrays
+- [**Custom Curly Braces & Custom Brackets**](https://muhammad-fiaz.github.io/args.zig/guide/options-flags#custom-brackets) - Auto-strip `{}`, `[]`, `<>`, `()` from inline values; configurable via `allow_brackets`
+- [**Fallback Parse API**](https://muhammad-fiaz.github.io/args.zig/api/parser#parseor) - `parseOr()` / `parseProcessOr()` with optional error callback for graceful error recovery
+- [**Well Tested**](CONTRIBUTING.md#running-tests) - Extensive test coverage (217+ tests)
 
 
 ### Release Installation (Recommended)
 
-Install the latest stable release for zig v0.16 (v0.0.6):
+Install the latest stable release for zig v0.16 (v0.0.7):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.6.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
 ```
 
 Install the supported release for zig v0.15 (v0.0.4):

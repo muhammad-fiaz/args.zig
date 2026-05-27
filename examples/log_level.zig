@@ -36,13 +36,13 @@ pub fn main(init: std.process.Init) !void {
     var result = try parser.parseProcess(init);
     defer result.deinit();
 
-    const verbosity = result.get("verbosity").?.asInt() orelse 0;
+    const verbosity = result.getInt("verbosity") orelse 0;
     std.debug.print("Verbosity level: {d}\n", .{verbosity});
 
     if (verbosity >= 1) std.debug.print("  verbose mode enabled\n", .{});
     if (verbosity >= 2) std.debug.print("  debug output active\n", .{});
     if (verbosity >= 3) std.debug.print("  trace logging on\n", .{});
-    if (result.get("dry-run").?.asBool().?) {
+    if (result.getBool("dry-run") orelse false) {
         std.debug.print("  DRY RUN: no changes will be made\n", .{});
     }
 }

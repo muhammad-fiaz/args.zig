@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const constants = @import("constants.zig");
+const utils = @import("utils.zig");
 
 /// Represents all possible value types for command-line arguments.
 pub const ValueType = enum {
@@ -149,6 +150,42 @@ pub const Nargs = union(enum) {
         return switch (self) {
             .zero_or_more, .one_or_more, .remainder => true,
             else => false,
+        };
+    }
+};
+
+/// Bracket type used for value grouping in bracket-delimited arguments.
+pub const BracketType = enum {
+    /// Parentheses: (value1, value2)
+    parentheses,
+    /// Square brackets: [value1, value2]
+    square,
+    /// Curly braces: {value1, value2}
+    curly,
+    /// Angle brackets: <value1, value2>
+    angle,
+    /// No bracket grouping
+    none,
+
+    /// Detect bracket type from the first character of a string.
+    pub fn detect(first: u8) BracketType {
+        return switch (first) {
+            '(' => .parentheses,
+            '[' => .square,
+            '{' => .curly,
+            '<' => .angle,
+            else => .none,
+        };
+    }
+
+    /// Get the closing bracket character for this type.
+    pub fn closing(self: BracketType) ?u8 {
+        return switch (self) {
+            .parentheses => ')',
+            .square => ']',
+            .curly => '}',
+            .angle => '>',
+            .none => null,
         };
     }
 };
@@ -342,7 +379,7 @@ pub const ParseResult = struct {
     pub fn getEnum(self: *const ParseResult, comptime T: type, name: []const u8) ?T {
         const str = self.getString(name) orelse return null;
         inline for (@typeInfo(T).@"enum".fields) |field| {
-            if (std.mem.eql(u8, str, field.name)) return @field(T, field.name);
+            if (utils.eql(str, field.name)) return @field(T, field.name);
         }
         return null;
     }
@@ -370,6 +407,16 @@ pub const ParseResult = struct {
     /// Get an unsigned integer value with a default fallback.
     pub fn getOrUint(self: *const ParseResult, name: []const u8, default: u64) u64 {
         return self.getUint(name) orelse default;
+    }
+
+    /// Get a counter value with a default fallback.
+    pub fn getOrCounter(self: *const ParseResult, name: []const u8, default: u32) u32 {
+        return self.getCounter(name) orelse default;
+    }
+
+    /// Get a key-value pair with a default fallback.
+    pub fn getOrKeyValue(self: *const ParseResult, name: []const u8, default: KeyValue) KeyValue {
+        return self.getKeyValue(name) orelse default;
     }
 
     /// Check if a value exists.

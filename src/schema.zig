@@ -4,6 +4,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const validation = @import("validation.zig");
+const utils = @import("utils.zig");
 
 pub const ValueType = types.ValueType;
 pub const ArgAction = types.ArgAction;
@@ -163,9 +164,9 @@ pub const SubcommandSpec = struct {
 
     /// Check if the given name matches this subcommand.
     pub fn matches(self: *const SubcommandSpec, name: []const u8) bool {
-        if (std.mem.eql(u8, self.name, name)) return true;
+        if (utils.eql(self.name, name)) return true;
         for (self.aliases) |alias| {
-            if (std.mem.eql(u8, alias, name)) return true;
+            if (utils.eql(alias, name)) return true;
         }
         return false;
     }

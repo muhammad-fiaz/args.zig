@@ -43,10 +43,6 @@ pub const ColorTheme = utils.ColorTheme;
 
 // Version information
 pub const VERSION = version_info.version;
-pub const VERSION_MAJOR = 0;
-pub const VERSION_MINOR = 0;
-pub const VERSION_PATCH = 6;
-pub const MINIMUM_ZIG_VERSION = "0.16.0";
 
 fn pickExtensionValidator(
     comptime allowed_extensions: []const []const u8,
@@ -1105,7 +1101,7 @@ pub const ArgumentParser = struct {
 
     /// Adds an integer-typed option (e.g., --count 42, --retries 3).
     /// The value is validated as a valid integer at parse time.
-    pub fn addIntOption(self: *ArgumentParser, name: []const u8, options: struct {
+    pub fn addIntOption(self: *ArgumentParser, name: []const u8, comptime options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
         default: ?[]const u8 = null,
@@ -1117,8 +1113,8 @@ pub const ArgumentParser = struct {
         aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
         expect: []const []const u8 = &.{},
-        comptime min: ?i64 = null,
-        comptime max: ?i64 = null,
+        min: ?i64 = null,
+        max: ?i64 = null,
     }) !void {
         const validator_fn: ?validation.ValidatorFn = if (options.min != null or options.max != null)
             validation.Validators.intRange(options.min, options.max)
@@ -1144,7 +1140,7 @@ pub const ArgumentParser = struct {
 
     /// Adds a float-typed option (e.g., --rate 3.14, --threshold 0.95).
     /// The value is validated as a valid floating-point number at parse time.
-    pub fn addFloatOption(self: *ArgumentParser, name: []const u8, options: struct {
+    pub fn addFloatOption(self: *ArgumentParser, name: []const u8, comptime options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
         default: ?[]const u8 = null,
@@ -1156,8 +1152,8 @@ pub const ArgumentParser = struct {
         aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
         expect: []const []const u8 = &.{},
-        comptime min: ?f64 = null,
-        comptime max: ?f64 = null,
+        min: ?f64 = null,
+        max: ?f64 = null,
     }) !void {
         const validator_fn: ?validation.ValidatorFn = if (options.min != null or options.max != null)
             validation.Validators.floatRange(options.min, options.max)
@@ -1183,7 +1179,7 @@ pub const ArgumentParser = struct {
 
     /// Adds an unsigned integer-typed option (e.g., --threads 4).
     /// The value is validated as a valid non-negative integer at parse time.
-    pub fn addUintOption(self: *ArgumentParser, name: []const u8, options: struct {
+    pub fn addUintOption(self: *ArgumentParser, name: []const u8, comptime options: struct {
         short: ?u8 = null,
         help: ?[]const u8 = null,
         default: ?[]const u8 = null,
@@ -1195,8 +1191,8 @@ pub const ArgumentParser = struct {
         aliases: []const []const u8 = &.{},
         deprecated: ?[]const u8 = null,
         expect: []const []const u8 = &.{},
-        comptime min: ?u64 = null,
-        comptime max: ?u64 = null,
+        min: ?u64 = null,
+        max: ?u64 = null,
     }) !void {
         const validator_fn: ?validation.ValidatorFn = if (options.min != null or options.max != null)
             validation.Validators.uintRange(options.min orelse 0, options.max orelse std.math.maxInt(u64))
@@ -1684,7 +1680,7 @@ pub const ArgumentParser = struct {
             .hidden = options.hidden,
             .aliases = options.aliases,
             .deprecated = options.deprecated,
-            .metavar = "LIST",
+            .metavar = constants.Metavars.list,
         });
     }
 
@@ -1707,7 +1703,7 @@ pub const ArgumentParser = struct {
             .hidden = options.hidden,
             .aliases = options.aliases,
             .deprecated = options.deprecated,
-            .metavar = "LIST",
+            .metavar = constants.Metavars.list,
         });
     }
 
@@ -1797,7 +1793,7 @@ pub const ArgumentParser = struct {
         env_map: ?*const std.process.Environ.Map,
     ) !ParseResult {
         const spec = self.buildSpec();
-        var p = try parser.Parser.init(self.allocator, spec, io, env_map);
+        var p = try parser.Parser.initWithConfig(self.allocator, spec, io, env_map, self.cfg);
         defer p.deinit();
         return p.parse(args_slice);
     }
@@ -1817,6 +1813,34 @@ pub const ArgumentParser = struct {
         }
 
         return self.parseWithEnv(args_list[1..], proc_init.io, proc_init.environ_map);
+    }
+
+    /// Parses arguments from a slice, returning a default result on error.
+    /// The `on_error` callback is invoked with the error before returning a default ParseResult.
+    /// If `on_error` is null, the error is silently swallowed and an empty result is returned.
+    pub fn parseOr(
+        self: *ArgumentParser,
+        args_slice: []const []const u8,
+        on_error: ?*const fn (err: anyerror, parser: *ArgumentParser) void,
+    ) ParseResult {
+        return self.parse(args_slice) catch |err| {
+            if (on_error) |handler| handler(err, self);
+            return ParseResult.init(self.allocator);
+        };
+    }
+
+    /// Parses arguments from the process init context, returning a default result on error.
+    /// The `on_error` callback is invoked with the error before returning a default ParseResult.
+    /// If `on_error` is null, the error is silently swallowed and an empty result is returned.
+    pub fn parseProcessOr(
+        self: *ArgumentParser,
+        proc_init: std.process.Init,
+        on_error: ?*const fn (err: anyerror, parser: *ArgumentParser) void,
+    ) ParseResult {
+        return self.parseProcess(proc_init) catch |err| {
+            if (on_error) |handler| handler(err, self);
+            return ParseResult.init(self.allocator);
+        };
     }
 
     /// Generates the help text for the configured arguments.
@@ -2160,6 +2184,106 @@ pub const ArgumentParser = struct {
         });
     }
 
+    /// Adds an option with format validation against common file format extensions.
+    /// The value is validated as a known format name (json, yaml, csv, etc.).
+    pub fn addFormatOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = constants.Metavars.list,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        formats: []const []const u8 = &.{},
+    }) !void {
+        try self.args.append(self.allocator, .{
+            .name = name,
+            .short = options.short,
+            .long = name,
+            .help = options.help,
+            .value_type = .string,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .choices = options.formats,
+        });
+    }
+
+    /// Adds a file extension option — validates that input is a known file extension.
+    /// The `extensions` parameter expects a flat array of extension strings (e.g. ".json", ".yaml").
+    /// Defaults to all known extensions from the common format groups.
+    pub fn addExtensionOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = ".EXT",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        extensions: []const []const u8 = &.{},
+    }) !void {
+        try self.args.append(self.allocator, .{
+            .name = name,
+            .short = options.short,
+            .long = name,
+            .help = options.help,
+            .value_type = .string,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .choices = options.extensions,
+        });
+    }
+
+    /// Adds a bracket-delimited list option (supports {a,b,c}, [a,b,c], <a,b,c>).
+    /// Retrievable via `getArray(name)`.
+    pub fn addBracketedListOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = constants.Metavars.list,
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        separator: u8 = ',',
+    }) !void {
+        try self.args.append(self.allocator, .{
+            .name = name,
+            .short = options.short,
+            .long = name,
+            .help = options.help,
+            .value_type = .array,
+            .separator = options.separator,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+        });
+    }
+
     /// Automatically resolves any configuration conflicts in the active parser's config.
     pub fn configureAutoResolve(self: *ArgumentParser) void {
         self.cfg = self.cfg.autoResolve();
@@ -2199,7 +2323,7 @@ pub const ArgumentParser = struct {
 
     /// Prints the version to stdout.
     pub fn printVersion(self: *ArgumentParser) void {
-        std.debug.print("{s} {s}\n", .{ self.name, self.getVersion() });
+        std.debug.print(constants.HelpFormat.version_format, .{ self.name, self.getVersion() });
     }
 
     /// Checks if a short flag exists.
@@ -2474,9 +2598,9 @@ pub const version = getLibraryVersion;
 pub const deriveOptions = schema.deriveOptions;
 
 pub const PromptSelectOrAllOptions = struct {
-    select_key: []const u8 = "select",
-    all_key: []const u8 = "all",
-    question: []const u8 = "Choose target",
+    select_key: []const u8 = constants.Defaults.select_key,
+    all_key: []const u8 = constants.Defaults.all_key,
+    question: []const u8 = constants.Defaults.prompt_question,
     choices: []const []const u8,
     default_choice: ?[]const u8 = null,
     allow_all: bool = true,
@@ -2491,16 +2615,6 @@ pub const PromptSelectOrAllDecision = union(enum) {
     all: void,
     selected: []const u8,
 };
-
-fn trimAsciiWhitespace(input: []const u8) []const u8 {
-    var start: usize = 0;
-    var end: usize = input.len;
-
-    while (start < input.len and std.ascii.isWhitespace(input[start])) : (start += 1) {}
-    while (end > start and std.ascii.isWhitespace(input[end - 1])) : (end -= 1) {}
-
-    return input[start..end];
-}
 
 fn equalsWithCase(a: []const u8, b: []const u8, case_sensitive: bool) bool {
     if (case_sensitive) return std.mem.eql(u8, a, b);
@@ -2563,7 +2677,7 @@ pub fn parseCsvList(allocator: std.mem.Allocator, raw: []const u8) ![][]const u8
 
     var it = std.mem.splitScalar(u8, raw, ',');
     while (it.next()) |part| {
-        const trimmed = trimAsciiWhitespace(part);
+        const trimmed = utils.trim(part);
         if (trimmed.len == 0) continue;
         const owned = try allocator.dupe(u8, trimmed);
         try items.append(allocator, owned);
@@ -2590,10 +2704,10 @@ pub const IncludeExcludeResolved = struct {
 };
 
 pub const IncludeExcludeStrictOptions = struct {
-    include_key: []const u8 = "include",
-    exclude_key: []const u8 = "exclude",
+    include_key: []const u8 = constants.Defaults.include_name,
+    exclude_key: []const u8 = constants.Defaults.exclude_name,
     choices: []const []const u8 = &.{},
-    all_keyword: ?[]const u8 = "all",
+    all_keyword: ?[]const u8 = constants.Defaults.all_keyword,
     case_sensitive: bool = false,
     allow_prefix_match: bool = true,
     dedupe: bool = true,
@@ -2613,8 +2727,8 @@ pub const IncludeExcludeStrictResolved = struct {
 };
 
 pub const SelectOrAllStrictOptions = struct {
-    select_key: []const u8 = "select",
-    all_key: []const u8 = "all",
+    select_key: []const u8 = constants.Defaults.select_key,
+    all_key: []const u8 = constants.Defaults.all_key,
     choices: []const []const u8 = &.{},
     case_sensitive: bool = false,
     allow_prefix_match: bool = true,
@@ -2817,7 +2931,7 @@ fn writePromptMenu(writer: *std.Io.Writer, options: PromptSelectOrAllOptions) !v
         try writer.writeAll(constants.PromptText.all_menu);
     }
     for (options.choices, 0..) |choice, idx| {
-        try writer.print("  {d}) {s}\n", .{ idx + 1, choice });
+        try writer.print(constants.PromptText.menu_item_format, .{ idx + 1, choice });
     }
     try writer.writeAll(constants.PromptText.enter_prompt);
 }
@@ -2857,7 +2971,7 @@ pub fn resolveSelectOrAllWithPromptIO(
         const line_opt = try reader.takeDelimiter('\n');
         const owned_line = line_opt orelse return error.EndOfStream;
 
-        const answer = trimAsciiWhitespace(owned_line);
+        const answer = utils.trim(owned_line);
 
         if (answer.len == 0) {
             if (options.default_choice) |def| {
@@ -2876,7 +2990,7 @@ pub fn resolveSelectOrAllWithPromptIO(
             return .{ .all = {} };
         }
 
-        const parsed_index = std.fmt.parseInt(usize, answer, 10) catch null;
+        const parsed_index = utils.parseUint(usize, answer);
         if (parsed_index) |idx| {
             if (idx >= 1 and idx <= options.choices.len) {
                 return .{ .selected = options.choices[idx - 1] };
@@ -3166,7 +3280,7 @@ test "disableUpdateCheck and enableUpdateCheck" {
 
 test "getLibraryVersion" {
     const ver = getLibraryVersion();
-    try std.testing.expectEqualStrings("0.0.6", ver);
+    try std.testing.expectEqualStrings("0.0.7", ver);
 }
 
 test "ArgumentParser subcommand" {
@@ -4250,4 +4364,202 @@ test "ArgumentParser config auto-resolve and warnings" {
     ap.configureAutoResolve();
     try std.testing.expect(!ap.cfg.exit_on_error);
     try std.testing.expect(!ap.cfg.use_colors);
+}
+
+// ─── New Feature Tests ─────────────────────────────────────────────
+
+test "utils.parseBracketedList parses curly braces" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var result = try utils.parseBracketedList(allocator, "{a,b,c}", ',');
+    defer result.deinit();
+    try std.testing.expectEqual(@as(usize, 3), result.items.len);
+    try std.testing.expectEqualStrings("a", result.items[0]);
+    try std.testing.expectEqualStrings("b", result.items[1]);
+    try std.testing.expectEqualStrings("c", result.items[2]);
+    try std.testing.expect(result.bracket_type == .curly);
+}
+
+test "utils.parseBracketedList parses square brackets" {
+    const allocator = std.testing.allocator;
+    var result = try utils.parseBracketedList(allocator, "[x,y,z]", ',');
+    defer result.deinit();
+    try std.testing.expectEqual(@as(usize, 3), result.items.len);
+    try std.testing.expectEqualStrings("x", result.items[0]);
+    try std.testing.expect(result.bracket_type == .square);
+}
+
+test "utils.parseBracketedList parses angle brackets" {
+    const allocator = std.testing.allocator;
+    var result = try utils.parseBracketedList(allocator, "<1,2,3>", ',');
+    defer result.deinit();
+    try std.testing.expectEqual(@as(usize, 3), result.items.len);
+    try std.testing.expectEqualStrings("1", result.items[0]);
+    try std.testing.expect(result.bracket_type == .angle);
+}
+
+test "utils.parseBracketedList returns single item for plain value" {
+    const allocator = std.testing.allocator;
+    var result = try utils.parseBracketedList(allocator, "hello", ',');
+    defer result.deinit();
+    try std.testing.expectEqual(@as(usize, 1), result.items.len);
+    try std.testing.expectEqualStrings("hello", result.items[0]);
+    try std.testing.expect(result.bracket_type == .none);
+}
+
+test "utils.detectBracket and stripBrackets" {
+    try std.testing.expect(utils.detectBracket("{hello}") == .curly);
+    try std.testing.expect(utils.detectBracket("[hello]") == .square);
+    try std.testing.expect(utils.detectBracket("<hello>") == .angle);
+    try std.testing.expect(utils.detectBracket("(hello)") == .parentheses);
+    try std.testing.expect(utils.detectBracket("hello") == .none);
+
+    try std.testing.expectEqualStrings("hello", utils.stripBrackets("{hello}").?);
+    try std.testing.expectEqualStrings("hello", utils.stripBrackets("[hello]").?);
+    try std.testing.expectEqualStrings("hello", utils.stripBrackets("<hello>").?);
+    try std.testing.expect(utils.stripBrackets("hello") == null);
+}
+
+test "ArgumentParser addFormatOption" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    try ap.addFormatOption("format", .{});
+
+    const args = [_][]const u8{"--format", "json"};
+    var result = try ap.parse(&args);
+    defer result.deinit();
+    try std.testing.expectEqualStrings("json", result.getString("format").?);
+}
+
+test "ArgumentParser addExtensionOption" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    try ap.addExtensionOption("ext", .{ .short = 'e' });
+
+    const args = [_][]const u8{"-e", "json"};
+    var result = try ap.parse(&args);
+    defer result.deinit();
+    try std.testing.expectEqualStrings("json", result.getString("ext").?);
+}
+
+test "ArgumentParser addBracketedListOption with curly braces" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    try ap.addBracketedListOption("hosts", .{ .short = 'H' });
+
+    // Inline with curly braces via =
+    const args = [_][]const u8{"--hosts={a,b,c}"};
+    var result = try ap.parse(&args);
+    defer result.deinit();
+    const arr = result.getArray("hosts").?;
+    try std.testing.expectEqual(@as(usize, 3), arr.len);
+    try std.testing.expectEqualStrings("a", arr[0]);
+    try std.testing.expectEqualStrings("b", arr[1]);
+    try std.testing.expectEqualStrings("c", arr[2]);
+}
+
+test "ArgumentParser addBracketedListOption with square brackets" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    try ap.addBracketedListOption("hosts", .{ .short = 'H' });
+
+    const args = [_][]const u8{"--hosts=[x,y,z]"};
+    var result = try ap.parse(&args);
+    defer result.deinit();
+    const arr = result.getArray("hosts").?;
+    try std.testing.expectEqual(@as(usize, 3), arr.len);
+    try std.testing.expectEqualStrings("x", arr[0]);
+}
+
+test "ArgumentParser addAppend stores as array" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    try ap.addAppend("output", .{ .short = 'o' });
+
+    const args = [_][]const u8{ "-o", "file1.txt", "-o", "file2.txt" };
+    var result = try ap.parse(&args);
+    defer result.deinit();
+    const arr = result.getArray("output").?;
+    try std.testing.expectEqual(@as(usize, 2), arr.len);
+    try std.testing.expectEqualStrings("file1.txt", arr[0]);
+    try std.testing.expectEqualStrings("file2.txt", arr[1]);
+}
+
+test "ArgumentParser parseOr returns default on error" {
+    const allocator = std.testing.allocator;
+    config.initConfig(Config.minimal());
+    defer config.resetConfig();
+
+    var ap = try ArgumentParser.init(allocator, .{ .name = "test" });
+    defer ap.deinit();
+
+    // Add a positional that must exist
+    try ap.addOption("input", .{ .required = true, .value_type = .string });
+
+    // Parse with no args — should fail, but parseOr returns empty result
+    var result = ap.parseOr(&.{}, null);
+    defer result.deinit();
+    // Empty result should have no values
+    try std.testing.expect(!result.contains("input"));
+}
+
+test "ParseResult getOrCounter and getOrKeyValue" {
+    const allocator = std.testing.allocator;
+
+    var result = types.ParseResult.init(allocator);
+    defer result.deinit();
+
+    try result.put("counter_field", .{ .counter = 5 });
+    try result.put("kv_field", .{ .key_value = .{ .key = "mykey", .value = "myval" } });
+
+    try std.testing.expectEqual(@as(u32, 5), result.getOrCounter("counter_field", 0));
+    try std.testing.expectEqual(@as(u32, 99), result.getOrCounter("missing", 99));
+
+    const kv = result.getOrKeyValue("kv_field", .{ .key = "", .value = "" });
+    try std.testing.expectEqualStrings("mykey", kv.key);
+    try std.testing.expectEqualStrings("myval", kv.value);
+
+    const missing_kv = result.getOrKeyValue("missing", .{ .key = "fallback", .value = "val" });
+    try std.testing.expectEqualStrings("fallback", missing_kv.key);
+}
+
+test "BracketType enum" {
+    try std.testing.expect(types.BracketType.detect('{') == .curly);
+    try std.testing.expect(types.BracketType.detect('[') == .square);
+    try std.testing.expect(types.BracketType.detect('<') == .angle);
+    try std.testing.expect(types.BracketType.detect('(') == .parentheses);
+    try std.testing.expect(types.BracketType.detect('a') == .none);
+
+    try std.testing.expectEqual(@as(u8, '}'), types.BracketType.curly.closing().?);
+    try std.testing.expectEqual(@as(u8, ']'), types.BracketType.square.closing().?);
+    try std.testing.expectEqual(@as(u8, '>'), types.BracketType.angle.closing().?);
+    try std.testing.expectEqual(@as(u8, ')'), types.BracketType.parentheses.closing().?);
+    try std.testing.expect(types.BracketType.none.closing() == null);
 }

@@ -244,6 +244,7 @@ pub const PromptText = struct {
     pub const enter_prompt = "Enter number or name: ";
     pub const invalid_selection = "Invalid selection. Try again.\n";
     pub const did_you_mean = "Did you mean '{s}'?\n";
+    pub const menu_item_format = "  {d}) {s}\n";
 };
 
 pub const Builtins = struct {
@@ -273,4 +274,74 @@ pub const TypeNames = struct {
     pub const default_bool = "false";
     pub const default_duration = "0s";
     pub const default_size = "0";
+};
+
+/// All user-facing validator error messages.
+pub const ValidationMessages = struct {
+    pub const extension_not_allowed = "file extension is not allowed";
+    pub const cannot_be_empty = "value cannot be empty";
+    pub const must_be_alphanumeric = "value must be alphanumeric";
+    pub const must_be_numeric = "value must be numeric";
+    pub const invalid_email = "invalid email address";
+    pub const invalid_url = "invalid URL (expected http/https)";
+    pub const invalid_ipv4 = "invalid IPv4 address";
+    pub const invalid_ipv6 = "invalid IPv6 address";
+    pub const invalid_ip = "invalid IP address";
+    pub const invalid_uuid = "invalid UUID";
+    pub const invalid_iso_date = "invalid date (expected YYYY-MM-DD)";
+    pub const invalid_iso_datetime = "invalid date-time (expected YYYY-MM-DDTHH:MM:SS[Z])";
+    pub const invalid_json = "invalid JSON";
+    pub const invalid_year = "invalid year (expected YYYY)";
+    pub const invalid_time = "invalid time (expected HH:MM or HH:MM:SS)";
+    pub const invalid_hostname = "invalid hostname";
+    pub const invalid_port = "invalid port (expected 1..65535)";
+    pub const invalid_hex_color = "invalid hex color (expected #RGB, #RRGGBB, #RGBA, or #RRGGBBAA)";
+    pub const invalid_semver = "invalid semantic version (expected MAJOR.MINOR.PATCH)";
+    pub const invalid_base64 = "invalid base64 string";
+    pub const invalid_mac = "invalid MAC address (expected XX:XX:XX:XX:XX:XX)";
+    pub const ascii_only = "value must contain only ASCII characters";
+    pub const must_be_lowercase = "value must be lowercase";
+    pub const must_be_uppercase = "value must be uppercase";
+    pub const invalid_endpoint = "invalid endpoint (expected host:port)";
+    pub const invalid_kv_pair = "invalid key=value pair";
+    pub const invalid_int = "invalid integer";
+    pub const int_out_of_range = "integer is out of range";
+    pub const invalid_uint = "invalid unsigned integer";
+    pub const uint_out_of_range = "unsigned integer is out of range";
+    pub const invalid_float = "invalid float";
+    pub const float_out_of_range = "float is out of range";
+    pub const path_not_exist = "path does not exist";
+    pub const path_must_be_absolute = "path must be absolute";
+    pub const file_not_exist = "file does not exist";
+    pub const dir_not_exist = "directory does not exist";
+    pub const invalid_file_name = "invalid file name";
+    pub const file_name_length_out_of_range = "file name length is out of range";
+    pub const char_length_out_of_range = "character length is out of range";
+    pub const no_validator_matched = "value did not satisfy any validator";
+};
+
+/// Format strings and labels used in help text generation.
+pub const HelpFormat = struct {
+    pub const options_tag = " [OPTIONS]";
+    pub const command_tag = " <COMMAND>";
+    pub const required_annotation = " [required]";
+    pub const builtin_help_line = "    -h, --help";
+    pub const builtin_version_line = "    -V, --version";
+    pub const choices_format = " [choices: ";
+    pub const choices_close = "]";
+    pub const default_label = " [default: ";
+    pub const env_label = " [env: ";
+    pub const negate_label = " [negate: --no-";
+    pub const close_bracket = "]";
+    pub const usage_format = "Usage: {s}";
+    pub const version_format = "{s} {s}\n";
+    pub const group_exclusive_error = "Arguments in group '{s}' are mutually exclusive\n";
+};
+
+/// Update notification banner lines.
+pub const UpdateNotification = struct {
+    pub const top_border = "╭─────────────────────────────────────────────────────────╮\n";
+    pub const message_line = "│  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n";
+    pub const command_line = "│  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n";
+    pub const bottom_border = "╰─────────────────────────────────────────────────────────╯\n";
 };

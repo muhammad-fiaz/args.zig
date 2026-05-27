@@ -8,7 +8,7 @@ args.zig provides robust validation mechanisms to ensure your application receiv
 Arguments are automatically validated against their `value_type`.
 - `.int`, `.uint`: Must be valid integers.
 - `.float`: Must be valid floating-point numbers.
-- `.bool`: Must be `true`, `false`, `1`, `0`, `yes`, `no`, etc.
+- `.bool`: Accepts case-insensitive values: `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and single-letter `y`/`n`/`t`/`f`.
 
 ### Choices
 You can restrict values to a specific set of strings using `.choices`.

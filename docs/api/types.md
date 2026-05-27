@@ -16,11 +16,7 @@ This document covers all core types and compile-time version constants in args.z
 The library exposes the following compile-time constants for versioning:
 
 ```zig
-pub const VERSION = "0.0.6";
-pub const VERSION_MAJOR = 0;
-pub const VERSION_MINOR = 0;
-pub const VERSION_PATCH = 6;
-pub const MINIMUM_ZIG_VERSION = "0.16.0";
+pub const VERSION = "0.0.7";
 ```
 
 ## ValueType
@@ -113,6 +109,64 @@ pub const Nargs = union(enum) {
 
 // One or more
 .nargs = .one_or_more
+```
+
+## ParseResult
+
+The result of parsing command-line arguments.
+
+```zig
+pub const ParseResult = struct {
+    // ... internal fields
+};
+```
+
+### Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `get(name)` | `?ParsedValue` | Get a parsed value by name |
+| `getString(name)` | `?[]const u8` | Get string value (or null) |
+| `getInt(name)` | `?i64` | Get integer value (or null) |
+| `getBool(name)` | `?bool` | Get boolean value (or null) |
+| `getFloat(name)` | `?f64` | Get float value (or null) |
+| `getUint(name)` | `?u64` | Get unsigned integer value (or null) |
+| `getCounter(name)` | `?u32` | Get counter value (or null) |
+| `getKeyValue(name)` | `?KeyValue` | Get key-value pair (or null) |
+| `getArray(name)` | `?[]const []const u8` | Get array value (or null) |
+| `getEnum(T, name)` | `?T` | Get value as enum type (or null) |
+| `getDuration(name)` | `?u64` | Get duration in seconds (or null) |
+| `getSize(name)` | `?u64` | Get byte-size value (or null) |
+| `contains(name)` | `bool` | Check if a value exists |
+| `positionalCount()` | `usize` | Count of positional arguments |
+| `getPositional(index)` | `?[]const u8` | Get positional argument by index |
+
+### Fallback Methods (getOr*)
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `getOrString(name, default)` | `[]const u8` | Get string with fallback default |
+| `getOrInt(name, default)` | `i64` | Get integer with fallback default |
+| `getOrBool(name, default)` | `bool` | Get boolean with fallback default |
+| `getOrFloat(name, default)` | `f64` | Get float with fallback default |
+| `getOrUint(name, default)` | `u64` | Get unsigned integer with fallback default |
+| `getOrCounter(name, default)` | `u32` | Get counter value with fallback default |
+| `getOrKeyValue(name, default)` | `KeyValue` | Get key-value pair with fallback default |
+
+### Example: Fallback Patterns
+
+```zig
+// Using getOr* methods (inline fallback)
+const verbose = result.getOrBool("verbose", false);
+const count = result.getOrInt("count", 42);
+const output = result.getOrString("output", "default.txt");
+
+// Using orelse (equivalent)
+const verbose2 = result.getBool("verbose") orelse false;
+
+// Using with parseOr (parse-level fallback)
+var result = parser.parseOr(args, null); // returns empty ParseResult on error
+defer result.deinit();
 ```
 
 ## ParsedValue
@@ -250,6 +304,7 @@ pub const Config = struct {
     allow_interspersed: bool = true,
     allow_negated_flags: bool = true,
     case_sensitive: bool = true,
+    allow_brackets: bool = true,
     env_prefix: ?[]const u8 = null,
     silent_errors: bool = false,
     suggest_closest: bool = true,
@@ -365,6 +420,33 @@ _ = try builder.setVersion("1.0").setDescription("My App")
 const spec = builder.build();
 // Use spec with Parser...
 ```
+
+## BracketType
+
+Represents the bracket style for inline bracket-delimited list values.
+
+```zig
+pub const BracketType = enum {
+    parentheses,  // (a,b,c)
+    square,       // [a,b,c]
+    curly,        // {a,b,c}
+    angle,        // <a,b,c>
+    none,         // no brackets — plain comma-separated
+};
+```
+
+Used with `addBracketedListOption` to control which bracket styles are accepted.
+When set to `null` (the default), all bracket types are auto-detected.
+
+### Methods
+
+```zig
+pub fn detect(first: u8) BracketType
+pub fn closing(self: BracketType) u8
+```
+
+- `detect` — returns the `BracketType` corresponding to the character, or `.none`.
+- `closing` — returns the closing character for the bracket type (e.g. `.curly.closing()` returns `'}'`).
 
 ## Prompt Selection Types
 

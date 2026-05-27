@@ -62,6 +62,15 @@ features:
   - icon: 📋
     title: Declarative Structs
     details: Parse arguments directly into Zig structs with parseInto/derive for rapid prototyping and type-safe configuration.
+  - icon: 🔄
+    title: Bracket-Delimited Lists
+    details: Parse inline bracket values `{a,b,c}`, `[d,e,f]`, `<g,h,i>` as arrays with automatic detection.
+  - icon: 🗂️
+    title: File Format Helpers
+    details: Pass explicit format arrays to addFormatOption and addExtensionOption for file-format-aware CLI options.
+  - icon: 🛡️
+    title: Fallback Parse API
+    details: Graceful error recovery with parseOr, parseProcessOr, and value-level getOr* methods for bulletproof CLI tools.
 ---
 
 ## Requirements
@@ -101,39 +110,9 @@ pub fn main(init: std.process.Init) !void {
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.6):
+Install the latest stable release (v0.0.7):
 
-```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.6.tar.gz
-```
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
 
-Install the supported release for Zig v0.15 (v0.0.4):
-
-```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
-```
-
-### Nightly Installation
-
-Install the latest development version:
-
-```bash
-zig fetch --save git+https://github.com/muhammad-fiaz/args.zig
-```
-
-### Configure build.zig
-
-Then in your `build.zig`:
-
-```zig
-const args_dep = b.dependency("args", .{
-    .target = target,
-    .optimize = optimize,
-});
-exe.root_module.addImport("args", args_dep.module("args"));
-```
-
-## Current Version
-
-- **Package Version:** 0.0.6
+- **Package Version:** 0.0.7
 - **Minimum Zig Version:** 0.16.0

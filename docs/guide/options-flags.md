@@ -326,6 +326,30 @@ myapp --output=file.txt     # inline value
 myapp -n 5
 ```
 
+## File Format And Extension Helpers
+
+Dedicated helpers for format- and extension-aware options:
+
+```zig
+// Accept known file formats: json, yaml, toml, csv, xml, etc.
+try parser.addFormatOption("input-format", .{
+    .short = 'f',
+    .help = "Input format",
+    .default = "json",
+    .formats = &[_][]const u8{ "json", "yaml", "toml", "csv" },
+});
+
+// Accept known file extensions
+try parser.addExtensionOption("output-ext", .{
+    .short = 'o',
+    .help = "Output extension",
+    .default = ".json",
+    .extensions = &[_][]const u8{ ".json", ".yaml", ".csv", ".toml" },
+});
+```
+
+Pass an explicit array of strings to `formats` or `extensions` to define the allowed values. No built-in format lists are provided — you supply the exact set your application supports.
+
 ## Positional Arguments
 
 Arguments without flags:
@@ -433,7 +457,31 @@ try parser.addOption("env", .{
 
 ## Multiple Values
 
-Accept multiple values for a single option:
+Accept multiple values for a single option using variadic n-args:
+
+```zig
+// Accepts 1+ values: --source a.json b.json c.json
+try parser.addOption("source", .{
+    .short = 's',
+    .help = "Source files (one or more)",
+    .nargs = .one_or_more,
+});
+
+// Accepts 0+ values: --targets x y z
+try parser.addOption("targets", .{
+    .short = 't',
+    .help = "Target directories",
+    .nargs = .zero_or_more,
+});
+
+// Remainder (consumes all remaining args)
+try parser.addOption("files", .{
+    .help = "Remaining files",
+    .nargs = .remainder,
+});
+```
+
+The `addMultiple` helper provides simpler syntax for bounded variadic options:
 
 ```zig
 // Accepts 1 to 3 integers: --numbers 1 2 3
@@ -445,9 +493,11 @@ try parser.addMultiple("numbers", .{
 });
 ```
 
+Retrieve multi-value results via `result.getArray("name")`.
+
 ## Appended Values
 
-Collect same flag multiple times:
+Collect same flag multiple times — each occurrence appends to an array:
 
 ```zig
 // --include path1 --include path2
@@ -456,6 +506,38 @@ try parser.addAppend("include", .{
     .help = "Include path",
 });
 ```
+
+Retrieve appended values via `result.getArray("include")`.
+
+## Bracket-Delimited Lists
+
+Parse inline bracket-delimited values as arrays. Supports `{a,b,c}`, `[a,b,c]`, `<a,b,c>`:
+
+```zig
+try parser.addBracketedListOption("tags", .{
+    .short = 't',
+    .help = "Tags (e.g. {rust,zig,go})",
+});
+
+try parser.addBracketedListOption("files", .{
+    .short = 'f',
+    .help = "Files (curly braces only)",
+    .bracket_type = .curly,
+});
+```
+
+**Usage:**
+```bash
+# All bracket types auto-detected:
+app --tags {a,b,c}
+app --tags [x,y,z]
+app --tags <p,q,r>
+
+# Restrict to curly braces only:
+app --files {foo.txt,bar.txt}
+```
+
+Bracket parsing is enabled by default via the `allow_brackets` config setting. Set `allow_brackets = false` to disable. Retrieve via `result.getArray("name")`.
 
 ## Required vs Optional
 

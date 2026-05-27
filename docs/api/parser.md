@@ -192,8 +192,8 @@ pub fn addIntOption(self: *ArgumentParser, name: []const u8, options: struct {
     aliases: []const []const u8 = &.{},
     deprecated: ?[]const u8 = null,
     expect: []const []const u8 = &.{},
-    comptime min: ?i64 = null,
-    comptime max: ?i64 = null,
+    min: ?i64 = null,
+    max: ?i64 = null,
 }) !void
 ```
 
@@ -214,8 +214,8 @@ pub fn addFloatOption(self: *ArgumentParser, name: []const u8, options: struct {
     aliases: []const []const u8 = &.{},
     deprecated: ?[]const u8 = null,
     expect: []const []const u8 = &.{},
-    comptime min: ?f64 = null,
-    comptime max: ?f64 = null,
+    min: ?f64 = null,
+    max: ?f64 = null,
 }) !void
 ```
 
@@ -236,8 +236,8 @@ pub fn addUintOption(self: *ArgumentParser, name: []const u8, options: struct {
     aliases: []const []const u8 = &.{},
     deprecated: ?[]const u8 = null,
     expect: []const []const u8 = &.{},
-    comptime min: ?u64 = null,
-    comptime max: ?u64 = null,
+    min: ?u64 = null,
+    max: ?u64 = null,
 }) !void
 ```
 
@@ -928,7 +928,8 @@ pub fn addAppend(self: *ArgumentParser, name: []const u8, options: struct {
 }) !void
 ```
 
-Adds an option that appends values to an array.
+Adds an option that appends values to an array. Each occurrence of the option adds a
+new value to the array. Retrievable via `result.getArray("name")`.
 
 **Example:**
 ```zig
@@ -936,6 +937,11 @@ try parser.addAppend("include", .{
     .short = 'I',
     .help = "Include path (can be repeated)",
 });
+
+var result = try parser.parseProcess(init);
+if (result.getArray("include")) |paths| {
+    for (paths) |p| std.debug.print("{s}\n", .{p});
+}
 ```
 
 ### `addMultiple`
@@ -959,6 +965,77 @@ try parser.addMultiple("numbers", .{
     .min = 1,
     .max = 3,
 });
+```
+
+### `addBracketedListOption`
+
+```zig
+pub fn addBracketedListOption(self: *ArgumentParser, name: []const u8, options: struct {
+    short: ?u8 = null,
+    help: ?[]const u8 = null,
+    metavar: ?[]const u8 = null,
+    dest: ?[]const u8 = null,
+    bracket_type: ?types.BracketType = null,
+}) !void
+```
+
+Adds an option that parses bracket-delimited inline lists — `{a,b,c}`, `[a,b,c]`, `<a,b,c>`.
+When no `bracket_type` is specified, all bracket types are auto-detected.
+
+**Example:**
+```zig
+try parser.addBracketedListOption("tags", .{ .short = 't' });
+// Usage: --tags {rust,zig,go}  or  --tags [a,b,c]  or  --tags <x,y,z>
+```
+
+### `addFormatOption`
+
+```zig
+pub fn addFormatOption(self: *ArgumentParser, name: []const u8, options: struct {
+    short: ?u8 = null,
+    help: ?[]const u8 = null,
+    default: ?[]const u8 = null,
+    required: bool = false,
+    metavar: ?[]const u8 = "LIST",
+    dest: ?[]const u8 = null,
+    env_var: ?[]const u8 = null,
+    hidden: bool = false,
+    aliases: []const []const u8 = &.{},
+    deprecated: ?[]const u8 = null,
+    formats: []const []const u8 = &.{},
+}) !void
+```
+
+Adds an option that accepts a file format name. Pass an explicit array of allowed format names via `formats`.
+
+**Example:**
+```zig
+try parser.addFormatOption("input-format", .{ .short = 'f', .default = "json" });
+```
+
+### `addExtensionOption`
+
+```zig
+pub fn addExtensionOption(self: *ArgumentParser, name: []const u8, options: struct {
+    short: ?u8 = null,
+    help: ?[]const u8 = null,
+    default: ?[]const u8 = null,
+    required: bool = false,
+    metavar: ?[]const u8 = ".EXT",
+    dest: ?[]const u8 = null,
+    env_var: ?[]const u8 = null,
+    hidden: bool = false,
+    aliases: []const []const u8 = &.{},
+    deprecated: ?[]const u8 = null,
+    extensions: []const []const u8 = &.{},
+}) !void
+```
+
+Adds an option that accepts a file extension (e.g. `.json`, `.yaml`, `.csv`). Pass an explicit array of allowed extensions via `extensions`.
+
+**Example:**
+```zig
+try parser.addExtensionOption("output-ext", .{ .short = 'o', .default = ".json" });
 ```
 
 ### `addDurationOption`
@@ -1148,6 +1225,58 @@ Parses arguments from the current process using the process initialization conte
 **Example:**
 ```zig
 var result = try parser.parseProcess(init);
+defer result.deinit();
+```
+
+### `parseOr`
+
+```zig
+pub fn parseOr(
+    self: *ArgumentParser,
+    args_slice: []const []const u8,
+    on_error: ?*const fn (err: anyerror, parser: *ArgumentParser) void,
+) ParseResult
+```
+
+Parses arguments from a slice, returning a default (empty) `ParseResult` on error rather than propagating the error. The optional `on_error` callback is invoked with the error details before the default result is returned.
+
+**Example:**
+```zig
+// Silent fallback — returns empty result on error
+var result = parser.parseOr(args, null);
+defer result.deinit();
+
+// With custom error handler
+fn handleError(err: anyerror, parser: *ArgumentParser) void {
+    std.debug.print("Parse failed: {}\n", .{err});
+}
+var result = parser.parseOr(args, handleError);
+defer result.deinit();
+```
+
+### `parseProcessOr`
+
+```zig
+pub fn parseProcessOr(
+    self: *ArgumentParser,
+    proc_init: std.process.Init,
+    on_error: ?*const fn (err: anyerror, parser: *ArgumentParser) void,
+) ParseResult
+```
+
+Process-aware variant of `parseOr`. Parses from `std.process.Init` and returns a default `ParseResult` on error. The optional `on_error` callback is invoked with the error details.
+
+**Example:**
+```zig
+var result = parser.parseProcessOr(init, null);
+defer result.deinit();
+
+// With error handler that prints help
+fn onParseError(err: anyerror, parser: *ArgumentParser) void {
+    parser.printHelp() catch {};
+    std.debug.print("Error: {}\n", .{err});
+}
+var result = parser.parseProcessOr(init, onParseError);
 defer result.deinit();
 ```
 

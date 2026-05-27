@@ -64,12 +64,10 @@ pub fn printUpdateNotification(current: []const u8, latest: []const u8, url: []c
     const reset = theme.reset;
     const bold = theme.bold;
 
-    std.debug.print("\n", .{});
-    std.debug.print("{s}╭─────────────────────────────────────────────────────────╮{s}\n", .{ border, reset });
-    std.debug.print("{s}│{s}  A new version of {s}args.zig{s} is available: {s}{s}{s} → {s}{s}{s}  {s}│{s}\n", .{ border, reset, bold, reset, current_color, current, reset, latest_color, latest, reset, border, reset });
-    std.debug.print("{s}│{s}  Run: {s}zig fetch --save {s}{s}                   {s}│{s}\n", .{ border, reset, current_color, url, reset, border, reset });
-    std.debug.print("{s}╰─────────────────────────────────────────────────────────╯{s}\n", .{ border, reset });
-    std.debug.print("\n", .{});
+    std.debug.print("{s}{s}{s}", .{ border, constants.UpdateNotification.top_border, reset });
+    std.debug.print(constants.UpdateNotification.message_line, .{ border, reset, bold, reset, current_color, current, reset, latest_color, latest, reset, border, reset });
+    std.debug.print(constants.UpdateNotification.command_line, .{ border, reset, current_color, url, reset, border, reset });
+    std.debug.print("{s}{s}{s}", .{ border, constants.UpdateNotification.bottom_border, reset });
 }
 
 /// Get the current library version.
