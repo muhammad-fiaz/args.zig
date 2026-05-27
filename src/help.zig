@@ -37,7 +37,7 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
     try writer.print("{s}{s}{s}\n", .{ header, constants.HelpText.usage, reset });
     try writer.print("    {s}{s}{s}", .{ bold, display_name, reset });
 
-    if (spec.args.len > 0)         try writer.writeAll(constants.HelpFormat.options_tag);
+    if (spec.args.len > 0) try writer.writeAll(constants.HelpFormat.options_tag);
 
     for (spec.args) |arg| {
         if (arg.positional) {
@@ -50,7 +50,7 @@ pub fn generateHelpWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, u
         }
     }
 
-    if (spec.subcommands.len > 0)         try writer.writeAll(constants.HelpFormat.command_tag);
+    if (spec.subcommands.len > 0) try writer.writeAll(constants.HelpFormat.command_tag);
     try writer.writeAll("\n\n");
 
     if (spec.subcommands.len > 0) {
@@ -284,8 +284,8 @@ pub fn generateUsage(allocator: std.mem.Allocator, spec: CommandSpec) ![]const u
         }
     }
 
-    if (spec.args.len > 0)         try writer.writeAll(constants.HelpFormat.options_tag);
-    if (spec.subcommands.len > 0)         try writer.writeAll(constants.HelpFormat.command_tag);
+    if (spec.args.len > 0) try writer.writeAll(constants.HelpFormat.options_tag);
+    if (spec.subcommands.len > 0) try writer.writeAll(constants.HelpFormat.command_tag);
 
     return aw.toOwnedSlice();
 }

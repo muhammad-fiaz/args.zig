@@ -4432,7 +4432,7 @@ test "ArgumentParser addFormatOption" {
 
     try ap.addFormatOption("format", .{});
 
-    const args = [_][]const u8{"--format", "json"};
+    const args = [_][]const u8{ "--format", "json" };
     var result = try ap.parse(&args);
     defer result.deinit();
     try std.testing.expectEqualStrings("json", result.getString("format").?);
@@ -4448,7 +4448,7 @@ test "ArgumentParser addExtensionOption" {
 
     try ap.addExtensionOption("ext", .{ .short = 'e' });
 
-    const args = [_][]const u8{"-e", "json"};
+    const args = [_][]const u8{ "-e", "json" };
     var result = try ap.parse(&args);
     defer result.deinit();
     try std.testing.expectEqualStrings("json", result.getString("ext").?);
