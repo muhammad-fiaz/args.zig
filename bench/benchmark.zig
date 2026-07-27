@@ -519,7 +519,7 @@ fn benchmarkSizeParsing(allocator: std.mem.Allocator) !void {
 }
 
 fn benchmarkParseOrFallback(allocator: std.mem.Allocator) !void {
-    const test_args = [_][]const u8{ "--unknown-flag" };
+    const test_args = [_][]const u8{"--unknown-flag"};
     var parser = try initBenchParser(allocator, "bench");
     defer parser.deinit();
 
@@ -530,7 +530,7 @@ fn benchmarkParseOrFallback(allocator: std.mem.Allocator) !void {
 }
 
 fn benchmarkMutualExclusion(allocator: std.mem.Allocator) !void {
-    const test_args = [_][]const u8{ "--json" };
+    const test_args = [_][]const u8{"--json"};
     var parser = try initBenchParser(allocator, "bench");
     defer parser.deinit();
 
@@ -564,7 +564,7 @@ fn benchmarkRequiredIfRelation(allocator: std.mem.Allocator) !void {
 }
 
 fn benchmarkCaseInsensitiveParsing(allocator: std.mem.Allocator) !void {
-    const test_args = [_][]const u8{ "--VERBOSE" };
+    const test_args = [_][]const u8{"--VERBOSE"};
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "bench",
         .config = .{
