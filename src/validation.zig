@@ -532,11 +532,13 @@ pub const ValidatorFn = *const fn (std.Io, []const u8) ValidationResult;
 
 /// Default validators for common patterns.
 pub const Validators = struct {
+    /// Validates that value is not empty.
     pub fn nonEmpty(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (value.len > 0) .{ .ok = {} } else .{ .err = constants.ValidationMessages.cannot_be_empty };
     }
 
+    /// Validates that value contains only alphanumeric characters.
     pub fn alphanumeric(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         for (value) |c| {
@@ -545,6 +547,7 @@ pub const Validators = struct {
         return .{ .ok = {} };
     }
 
+    /// Validates that value contains only digits.
     pub fn numeric(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         for (value) |c| {
@@ -553,116 +556,139 @@ pub const Validators = struct {
         return .{ .ok = {} };
     }
 
+    /// Validates email address format.
     pub fn emailAddress(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateEmailAddress(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_email };
     }
 
+    /// Validates HTTP/HTTPS URL format.
     pub fn httpUrl(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateHttpUrl(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_url };
     }
 
+    /// Validates IPv4 address format (e.g., 192.168.1.1).
     pub fn ipv4(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateIPv4Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ipv4 };
     }
 
+    /// Validates IPv6 address format.
     pub fn ipv6(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateIPv6Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ipv6 };
     }
 
+    /// Validates any IP address (IPv4 or IPv6).
     pub fn ipAny(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateIPv4Address(value) or validateIPv6Address(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_ip };
     }
 
+    /// Validates UUID format (e.g., 550e8400-e29b-41d4-a716-446655440000).
     pub fn uuid(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateUuid(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_uuid };
     }
 
+    /// Validates ISO 8601 date format (YYYY-MM-DD).
     pub fn isoDate(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateIsoDate(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_iso_date };
     }
 
+    /// Validates ISO 8601 datetime format.
     pub fn isoDateTime(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateIsoDateTime(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_iso_datetime };
     }
 
+    /// Validates JSON string format.
     pub fn json(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateJsonValue(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_json };
     }
 
+    /// Validates 4-digit year format.
     pub fn year(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateYear(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_year };
     }
 
+    /// Validates 24-hour time format (HH:MM).
     pub fn time(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateTime24(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_time };
     }
 
+    /// Validates hostname format.
     pub fn hostname(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateHostName(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_hostname };
     }
 
+    /// Validates port number (0-65535).
     pub fn port(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validatePort(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_port };
     }
 
+    /// Validates hex color format (#RRGGBB or #RGB).
     pub fn hexColor(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateHexColor(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_hex_color };
     }
 
+    /// Validates semantic version format (MAJOR.MINOR.PATCH).
     pub fn semver(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateSemver(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_semver };
     }
 
+    /// Validates base64 encoded string.
     pub fn base64(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateBase64(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_base64 };
     }
 
+    /// Validates MAC address format (XX:XX:XX:XX:XX:XX).
     pub fn macAddress(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateMacAddress(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_mac };
     }
 
+    /// Validates that value contains only ASCII characters.
     pub fn asciiOnlyStr(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateAsciiOnly(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.ascii_only };
     }
 
+    /// Validates that value is all lowercase.
     pub fn lowercase(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateLowercase(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.must_be_lowercase };
     }
 
+    /// Validates that value is all uppercase.
     pub fn uppercase(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateUppercase(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.must_be_uppercase };
     }
 
+    /// Validates endpoint format (host:port).
     pub fn endpoint(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateEndpoint(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_endpoint };
     }
 
+    /// Validates key=value pair format.
     pub fn keyValuePair(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateKeyValuePair(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_kv_pair };
     }
 
+    /// Creates a validator that checks integer values are within a range.
     pub fn intRange(comptime min: ?i64, comptime max: ?i64) ValidatorFn {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
@@ -678,6 +704,7 @@ pub const Validators = struct {
         }.validate;
     }
 
+    /// Creates a validator that checks unsigned integer values are within a range.
     pub fn uintRange(comptime min: u64, comptime max: u64) ValidatorFn {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
@@ -689,6 +716,7 @@ pub const Validators = struct {
         }.validate;
     }
 
+    /// Creates a validator that checks float values are within a range.
     pub fn floatRange(comptime min: ?f64, comptime max: ?f64) ValidatorFn {
         return struct {
             fn validate(io: std.Io, value: []const u8) ValidationResult {
@@ -704,23 +732,28 @@ pub const Validators = struct {
         }.validate;
     }
 
+    /// Validates that path exists on filesystem.
     pub fn pathExists(io: std.Io, value: []const u8) ValidationResult {
         return if (validatePathExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.path_not_exist };
     }
 
+    /// Validates that path is absolute (starts with / or drive letter).
     pub fn absolutePath(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateAbsolutePath(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.path_must_be_absolute };
     }
 
+    /// Validates that file exists on filesystem.
     pub fn fileExists(io: std.Io, value: []const u8) ValidationResult {
         return if (validateFileExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.file_not_exist };
     }
 
+    /// Validates that directory exists on filesystem.
     pub fn directoryExists(io: std.Io, value: []const u8) ValidationResult {
         return if (validateDirectoryExists(io, value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.dir_not_exist };
     }
 
+    /// Validates that filename contains only safe characters.
     pub fn fileNameSafe(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateFileName(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_file_name };

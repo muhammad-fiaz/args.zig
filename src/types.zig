@@ -288,6 +288,7 @@ pub const ParseResult = struct {
     subcommand_args: ?*ParseResult,
     allocator: std.mem.Allocator,
 
+    /// Initializes a new empty ParseResult with the given allocator.
     pub fn init(allocator: std.mem.Allocator) ParseResult {
         return .{
             .values = std.StringHashMap(ParsedValue).init(allocator),
@@ -301,6 +302,7 @@ pub const ParseResult = struct {
         };
     }
 
+    /// Frees all owned memory (slices, arrays, values, positionals, remaining).
     pub fn deinit(self: *ParseResult) void {
         for (self.owned_slices.items) |slice| {
             self.allocator.free(slice);
@@ -390,8 +392,17 @@ pub const ParseResult = struct {
     /// Get an enum value by name, converting the string value to the given enum type.
     pub fn getEnum(self: *const ParseResult, comptime T: type, name: []const u8) ?T {
         const str = self.getString(name) orelse return null;
-        inline for (@typeInfo(T).@"enum".field_names) |ef_name| {
-            if (utils.eql(str, ef_name)) return @field(T, ef_name);
+        const enum_info = @typeInfo(T).@"enum";
+        if (comptime @hasField(@TypeOf(enum_info), "field_names")) {
+            // Zig 0.17+: field_names is [:0]const u8 directly
+            inline for (enum_info.field_names) |ef_name| {
+                if (utils.eql(str, ef_name)) return @field(T, ef_name);
+            }
+        } else {
+            // Zig 0.16: fields is array of structs with .name
+            inline for (enum_info.fields) |field| {
+                if (utils.eql(str, field.name)) return @field(T, field.name);
+            }
         }
         return null;
     }

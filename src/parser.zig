@@ -13,13 +13,21 @@ const config_mod = @import("config.zig");
 const utils = @import("utils.zig");
 const constants = @import("constants.zig");
 
+/// Result of parsing CLI arguments. Provides typed access to parsed values.
 pub const ParseResult = types.ParseResult;
+/// Union type representing a parsed value with typed accessors.
 pub const ParsedValue = types.ParsedValue;
+/// Specification for a single command-line argument.
 pub const ArgSpec = schema_mod.ArgSpec;
+/// Specification for the entire command (name, version, args, subcommands).
 pub const CommandSpec = schema_mod.CommandSpec;
+/// Tokenizer for splitting CLI arguments into tokens.
 pub const Tokenizer = tokenizer_mod.Tokenizer;
+/// A single token from the tokenizer.
 pub const Token = tokenizer_mod.Token;
+/// Type of token (long_option, short_option, value, etc.).
 pub const TokenType = tokenizer_mod.TokenType;
+/// Configuration options for parser behavior.
 pub const Config = config_mod.Config;
 const DecodedInput = validation.DecodedValue;
 
@@ -39,6 +47,7 @@ pub const Parser = struct {
         return initWithConfig(allocator, spec, io, env_map, config_mod.getConfig());
     }
 
+    /// Initializes a new parser instance with explicit configuration.
     pub fn initWithConfig(allocator: std.mem.Allocator, spec: CommandSpec, io: std.Io, env_map: ?*const std.process.Environ.Map, cfg: config_mod.Config) !Parser {
         var self = Parser{
             .allocator = allocator,
@@ -109,6 +118,15 @@ pub const Parser = struct {
                         }
                         return errors.ValidationError.CustomValidationFailed;
                     }
+                }
+                if (arg.choices.len > 0 and !self.validateChoiceWithCase(def, arg.choices)) {
+                    self.emitError("default value for '{s}' is not a valid choice. Allowed values: ", .{arg.name});
+                    for (arg.choices, 0..) |choice, i| {
+                        if (i > 0) self.emitError(", ", .{});
+                        self.emitError("{s}", .{choice});
+                    }
+                    self.emitError("\n", .{});
+                    return errors.ValidationError.CustomValidationFailed;
                 }
             }
         }
@@ -1207,6 +1225,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, spec: CommandSpec, args: []const 
     return parser.parse(args);
 }
 
+/// Returns the default IO interface (testing IO in tests, failing IO otherwise).
 pub fn defaultIo() std.Io {
     if (builtin.is_test) return std.testing.io;
     return std.Io.failing;

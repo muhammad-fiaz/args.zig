@@ -4,44 +4,78 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+/// Core type definitions (ParseResult, ParsedValue, ValueType, etc.).
 pub const types = @import("types.zig");
+/// Schema definitions (ArgSpec, CommandSpec, SubcommandSpec).
 pub const schema = @import("schema.zig");
+/// Tokenizer for splitting CLI arguments into tokens.
 pub const tokenizer = @import("tokenizer.zig");
+/// Parser implementation that processes tokens into ParseResult.
 pub const parser = @import("parser.zig");
+/// Built-in validators for common patterns (email, URL, IP, etc.).
 pub const validation = @import("validation.zig");
+/// Error types for parse, validation, and schema errors.
 pub const errors = @import("errors.zig");
+/// Help text generation and formatting.
 pub const help = @import("help.zig");
+/// Shell completion generation for Bash, Zsh, Fish, PowerShell.
 pub const completion = @import("completion.zig");
+/// Configuration options for parser behavior.
 pub const config = @import("config.zig");
+/// Version information for the library.
 pub const version_info = @import("version.zig");
+/// Update checker for checking newer library versions.
 pub const update_checker = @import("update_checker.zig");
+/// Network utilities for HTTP requests.
 pub const network = @import("network.zig");
+/// General utilities (string matching, fuzzy search, etc.).
 pub const utils = @import("utils.zig");
+/// Constants for help formatting, error messages, and defaults.
 pub const constants = @import("constants.zig");
 
 // Re-export commonly used types
+/// Result of parsing CLI arguments. Provides typed access to parsed values.
 pub const ParseResult = types.ParseResult;
+/// Union type representing a parsed value with typed accessors.
 pub const ParsedValue = types.ParsedValue;
+/// Supported value types for arguments (string, int, float, bool, etc.).
 pub const ValueType = types.ValueType;
+/// Argument actions (store, append, count, etc.).
 pub const ArgAction = types.ArgAction;
+/// Decode modes for encoding/decoding values (hex, base64, etc.).
 pub const DecodeMode = types.DecodeMode;
+/// Number of arguments to consume (nargs).
 pub const Nargs = types.Nargs;
-pub const ParsingMode = types.ParsingMode;
+/// Parsing modes (strict, permissive, interspersed, ignore_unknown).
+pub const ParsingMode = config.ParsingMode;
+/// Specification for a single command-line argument.
 pub const ArgSpec = schema.ArgSpec;
+/// Specification for the entire command (name, version, args, subcommands).
 pub const CommandSpec = schema.CommandSpec;
+/// Specification for a subcommand.
 pub const SubcommandSpec = schema.SubcommandSpec;
+/// Group of related arguments for mutual exclusion or requirements.
 pub const ArgumentGroup = schema.ArgumentGroup;
+/// Builder for constructing CommandSpec programmatically.
 pub const SchemaBuilder = schema.SchemaBuilder;
+/// Configuration options for parser behavior.
 pub const Config = config.Config;
+/// Shell type for completion generation.
 pub const Shell = completion.Shell;
+/// Errors that can occur during argument parsing.
 pub const ParseError = errors.ParseError;
+/// Errors that can occur during value validation.
 pub const ValidationError = errors.ValidationError;
+/// Errors that can occur during schema construction.
 pub const SchemaError = errors.SchemaError;
+/// Function type for custom validators.
 pub const ValidatorFn = validation.ValidatorFn;
+/// Built-in validators for common patterns.
 pub const Validators = validation.Validators;
+/// Color theme for help text output.
 pub const ColorTheme = utils.ColorTheme;
 
-// Version information
+/// Current library version string.
 pub const VERSION = version_info.version;
 
 fn pickExtensionValidator(
@@ -2692,6 +2726,7 @@ pub const version = getLibraryVersion;
 /// This is a re-export of `schema.deriveOptions` for convenience.
 pub const deriveOptions = schema.deriveOptions;
 
+/// Options for the interactive select-or-all prompt.
 pub const PromptSelectOrAllOptions = struct {
     select_key: []const u8 = constants.Defaults.select_key,
     all_key: []const u8 = constants.Defaults.all_key,
@@ -2706,8 +2741,11 @@ pub const PromptSelectOrAllOptions = struct {
     max_attempts: usize = 3,
 };
 
+/// Result of a select-or-all prompt: either "all" or a specific choice.
 pub const PromptSelectOrAllDecision = union(enum) {
+    /// User selected "all" option.
     all: void,
+    /// User selected a specific choice.
     selected: []const u8,
 };
 
@@ -2787,17 +2825,22 @@ pub fn deinitCsvList(allocator: std.mem.Allocator, items: [][]const u8) void {
     allocator.free(items);
 }
 
+/// Resolved include/exclude lists from an interactive prompt.
 pub const IncludeExcludeResolved = struct {
+    /// Items to include.
     include: [][]const u8,
+    /// Items to exclude.
     exclude: [][]const u8,
     allocator: std.mem.Allocator,
 
+    /// Frees the resolved include/exclude lists.
     pub fn deinit(self: *IncludeExcludeResolved) void {
         deinitCsvList(self.allocator, self.include);
         deinitCsvList(self.allocator, self.exclude);
     }
 };
 
+/// Options for strict include/exclude resolution.
 pub const IncludeExcludeStrictOptions = struct {
     include_key: []const u8 = constants.Defaults.include_name,
     exclude_key: []const u8 = constants.Defaults.exclude_name,
@@ -2809,18 +2852,24 @@ pub const IncludeExcludeStrictOptions = struct {
     fail_on_conflicts: bool = true,
 };
 
+/// Result of strict include/exclude resolution.
 pub const IncludeExcludeStrictResolved = struct {
+    /// Whether "all" was selected.
     all: bool,
+    /// Items to include.
     include: [][]const u8,
+    /// Items to exclude.
     exclude: [][]const u8,
     allocator: std.mem.Allocator,
 
+    /// Frees the resolved include/exclude lists.
     pub fn deinit(self: *IncludeExcludeStrictResolved) void {
         deinitCsvList(self.allocator, self.include);
         deinitCsvList(self.allocator, self.exclude);
     }
 };
 
+/// Options for strict select-or-all resolution.
 pub const SelectOrAllStrictOptions = struct {
     select_key: []const u8 = constants.Defaults.select_key,
     all_key: []const u8 = constants.Defaults.all_key,
@@ -2831,11 +2880,15 @@ pub const SelectOrAllStrictOptions = struct {
     require_selection_when_not_all: bool = false,
 };
 
+/// Result of strict select-or-all resolution.
 pub const SelectOrAllStrictResolved = struct {
+    /// Whether "all" was selected.
     all: bool,
+    /// Selected items.
     selected: [][]const u8,
     allocator: std.mem.Allocator,
 
+    /// Frees the resolved selected items.
     pub fn deinit(self: *SelectOrAllStrictResolved) void {
         deinitCsvList(self.allocator, self.selected);
     }
@@ -2894,6 +2947,8 @@ fn normalizeSelectedValue(raw_value: []const u8, options: SelectOrAllStrictOptio
     return error.InvalidChoice;
 }
 
+/// Resolves a select-or-all decision from parsed CLI arguments.
+/// Returns "all" if --all flag is set, otherwise parses --select CSV list.
 pub fn resolveSelectOrAllStrict(
     allocator: std.mem.Allocator,
     parsed: *const ParseResult,
@@ -2939,6 +2994,7 @@ pub fn resolveSelectOrAllStrict(
     };
 }
 
+/// Resolves include/exclude lists from parsed CSV string values.
 pub fn resolveIncludeExclude(
     allocator: std.mem.Allocator,
     parsed: *const ParseResult,
@@ -2955,6 +3011,7 @@ pub fn resolveIncludeExclude(
     };
 }
 
+/// Resolves include/exclude lists with strict validation (choices, deduplication, conflict detection).
 pub fn resolveIncludeExcludeStrict(
     allocator: std.mem.Allocator,
     parsed: *const ParseResult,
@@ -3031,6 +3088,7 @@ fn writePromptMenu(writer: *std.Io.Writer, options: PromptSelectOrAllOptions) !v
     try writer.writeAll(constants.PromptText.enter_prompt);
 }
 
+/// Resolves select-or-all decision with interactive prompt fallback using custom IO.
 pub fn resolveSelectOrAllWithPromptIO(
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
@@ -3114,6 +3172,7 @@ pub fn resolveSelectOrAllWithPromptIO(
     return error.InvalidValue;
 }
 
+/// Resolves select-or-all decision with interactive prompt using stdin/stdout.
 pub fn resolveSelectOrAllWithPrompt(
     parsed: *const ParseResult,
     options: PromptSelectOrAllOptions,
