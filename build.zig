@@ -1,5 +1,18 @@
 const std = @import("std");
 
+/// Forward extra CLI args to a run step in a way compatible with both Zig 0.16
+/// and 0.17+. In 0.17 the `b.args` field was removed and replaced by
+/// `run.addPassthruArgs()`. We detect this at comptime via `@hasDecl` so the
+/// check is based on actual API presence rather than a hardcoded version number.
+inline fn passthruArgs(run: *std.Build.Step.Run, b: *std.Build) void {
+    if (comptime @hasDecl(std.Build.Step.Run, "addPassthruArgs")) {
+        run.addPassthruArgs();
+    } else {
+        // Zig 0.16: b.args is a nullable []const []const u8 field on Build.
+        if (b.args) |args| run.addArgs(args);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -58,7 +71,6 @@ pub fn build(b: *std.Build) void {
     // Create run-all-examples step that runs all examples sequentially
     const run_all_examples = b.step("run-all-examples", "Run all examples sequentially");
 
-    // Build examples in smaller batches to avoid OOM
     inline for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example.name,
@@ -88,6 +100,11 @@ pub fn build(b: *std.Build) void {
 
         const run_step = b.step("run-" ++ example.name, "Run " ++ example.name ++ " example");
         run_step.dependOn(&run_exe.step);
+
+        // Wire into run-all-examples, honouring skip_run_all
+        if (!example.skip_run_all) {
+            run_all_examples.dependOn(&run_exe.step);
+        }
     }
 
     // Unit tests
@@ -105,9 +122,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const run_tests = b.addRunArtifact(tests);
-    if (b.args) |args| {
-        run_tests.addArgs(args);
-    }
+    passthruArgs(run_tests, b);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
 
@@ -130,9 +145,7 @@ pub fn build(b: *std.Build) void {
     const install_bench = b.addInstallArtifact(bench_exe, .{});
     const run_bench = b.addRunArtifact(bench_exe);
     run_bench.step.dependOn(&install_bench.step);
-    if (b.args) |args| {
-        run_bench.addArgs(args);
-    }
+    passthruArgs(run_bench, b);
 
     const bench_step = b.step("bench", "Run benchmarks");
     bench_step.dependOn(&run_bench.step);
@@ -156,14 +169,8 @@ pub fn build(b: *std.Build) void {
 
     // Create comprehensive test-all step that runs everything sequentially
     const test_all_step = b.step("test-all", "Run all tests, benchmarks, and examples sequentially");
-
-    // First run unit tests
     test_all_step.dependOn(test_step);
-
-    // Then run benchmarks
     test_all_step.dependOn(bench_step);
-
-    // Finally run all examples
     test_all_step.dependOn(run_all_examples);
 
     // Install step for library

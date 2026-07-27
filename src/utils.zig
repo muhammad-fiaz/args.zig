@@ -44,27 +44,10 @@ pub inline fn dupe(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
     return allocator.dupe(u8, s);
 }
 
-/// Join strings with separator.
+/// Join strings with separator — delegates directly to std.mem.join.
 pub fn join(allocator: std.mem.Allocator, strings: []const []const u8, separator: []const u8) ![]const u8 {
     if (strings.len == 0) return "";
-
-    var total_len: usize = 0;
-    for (strings) |s| total_len += s.len;
-    total_len += separator.len * (strings.len - 1);
-
-    var result = try allocator.alloc(u8, total_len);
-    var pos: usize = 0;
-
-    for (strings, 0..) |s, i| {
-        @memcpy(result[pos..][0..s.len], s);
-        pos += s.len;
-        if (i < strings.len - 1) {
-            @memcpy(result[pos..][0..separator.len], separator);
-            pos += separator.len;
-        }
-    }
-
-    return result;
+    return std.mem.join(allocator, separator, strings);
 }
 
 pub const Color = struct {
@@ -195,7 +178,7 @@ pub inline fn calcPadding(current_len: usize, target_len: usize) usize {
 
 /// Write N spaces to a writer.
 pub inline fn writeSpaces(writer: anytype, count: usize) !void {
-    try writer.writeByteNTimes(' ', count);
+    try writer.splatByteAll(' ', count);
 }
 
 /// Parse common boolean string representations.
@@ -298,7 +281,7 @@ pub fn findClosest(needle: []const u8, candidates: []const []const u8, max_dista
 /// Check if value is in choices array.
 pub fn inChoices(value: []const u8, choices: []const []const u8) bool {
     for (choices) |choice| {
-        if (eql(value, choice)) return true;
+        if (std.mem.eql(u8, value, choice)) return true;
     }
     return false;
 }

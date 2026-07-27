@@ -1387,17 +1387,13 @@ pub const ArgumentParser = struct {
     }) !void {
         const resolved_env = options.env_var orelse blk: {
             var buf: [256]u8 = undefined;
-            var i: usize = 0;
-            for (name) |c| {
-                if (i >= buf.len - 1) break;
-                buf[i] = switch (c) {
-                    '-' => '_',
-                    'a'...'z' => std.ascii.toUpper(c),
-                    else => c,
-                };
-                i += 1;
-            }
-            break :blk buf[0..i];
+            // Truncate names longer than buf to avoid overflow.
+            const src = if (name.len < buf.len) name else name[0..buf.len];
+            @memcpy(buf[0..src.len], src);
+            // Replace hyphens with underscores, then uppercase the whole slice.
+            std.mem.replaceScalar(u8, buf[0..src.len], '-', '_');
+            _ = std.ascii.upperString(buf[0..src.len], buf[0..src.len]);
+            break :blk buf[0..src.len];
         };
         try self.addOption(name, .{
             .short = options.short,
@@ -2461,59 +2457,79 @@ pub fn parseInto(
         return error.MissingProcessInit;
 
     var opts: T = undefined;
-    inline for (@typeInfo(T).@"struct".fields) |field| {
+    // Use a comptime helper to iterate struct fields compatibly across
+    // Zig 0.16 (builtin.Type.Struct has .fields[]) and
+    // Zig 0.17 (lang.Type.Struct has .field_names[] / .field_types[]).
+    const struct_info = @typeInfo(T).@"struct";
+    const field_count = comptime if (@hasField(@TypeOf(struct_info), "fields"))
+        struct_info.fields.len
+    else
+        struct_info.field_names.len;
+
+    comptime var fi: usize = 0;
+    inline while (fi < field_count) : (fi += 1) {
+        const field_name: [:0]const u8 = if (@hasField(@TypeOf(struct_info), "fields"))
+            struct_info.fields[fi].name
+        else
+            struct_info.field_names[fi];
+
+        const FT: type = if (@hasField(@TypeOf(struct_info), "fields"))
+            struct_info.fields[fi].type
+        else
+            struct_info.field_types[fi];
+
+        const InnerType = if (@typeInfo(FT) == .optional) @typeInfo(FT).optional.child else FT;
+
         const kebab_name = comptime blk: {
-            var buf: [field.name.len]u8 = undefined;
-            for (field.name, 0..) |c, i| {
-                buf[i] = if (c == '_') '-' else c;
+            var buf: [field_name.len]u8 = undefined;
+            for (field_name, 0..) |c, j| {
+                buf[j] = if (c == '_') '-' else c;
             }
             const final_buf = buf;
             break :blk final_buf;
         };
 
         const val_opt = result.get(&kebab_name);
-        const FT = field.type;
-        const InnerType = if (@typeInfo(FT) == .optional) @typeInfo(FT).optional.child else FT;
 
         if (FT == bool) {
-            @field(opts, field.name) = if (val_opt) |v| (v.asBool() orelse false) else false;
+            @field(opts, field_name) = if (val_opt) |v| (v.asBool() orelse false) else false;
         } else if (FT == ?bool) {
-            @field(opts, field.name) = if (val_opt) |v| v.asBool() else null;
+            @field(opts, field_name) = if (val_opt) |v| v.asBool() else null;
         } else if (FT == []const u8) {
-            @field(opts, field.name) = if (val_opt) |v| (v.asString() orelse "") else "";
+            @field(opts, field_name) = if (val_opt) |v| (v.asString() orelse "") else "";
         } else if (FT == ?[]const u8) {
-            @field(opts, field.name) = if (val_opt) |v| v.asString() else null;
+            @field(opts, field_name) = if (val_opt) |v| v.asString() else null;
         } else if (FT == i32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(i32, @intCast(v.asInt() orelse 0)) else 0;
+            @field(opts, field_name) = if (val_opt) |v| @as(i32, @intCast(v.asInt() orelse 0)) else 0;
         } else if (FT == ?i32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(?i32, @intCast(v.asInt())) else null;
+            @field(opts, field_name) = if (val_opt) |v| @as(?i32, @intCast(v.asInt())) else null;
         } else if (FT == i64) {
-            @field(opts, field.name) = if (val_opt) |v| (v.asInt() orelse 0) else 0;
+            @field(opts, field_name) = if (val_opt) |v| (v.asInt() orelse 0) else 0;
         } else if (FT == ?i64) {
-            @field(opts, field.name) = if (val_opt) |v| v.asInt() else null;
+            @field(opts, field_name) = if (val_opt) |v| v.asInt() else null;
         } else if (FT == u32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(u32, @intCast(v.asUint() orelse 0)) else 0;
+            @field(opts, field_name) = if (val_opt) |v| @as(u32, @intCast(v.asUint() orelse 0)) else 0;
         } else if (FT == ?u32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(?u32, @intCast(v.asUint())) else null;
+            @field(opts, field_name) = if (val_opt) |v| @as(?u32, @intCast(v.asUint())) else null;
         } else if (FT == u64) {
-            @field(opts, field.name) = if (val_opt) |v| (v.asUint() orelse 0) else 0;
+            @field(opts, field_name) = if (val_opt) |v| (v.asUint() orelse 0) else 0;
         } else if (FT == ?u64) {
-            @field(opts, field.name) = if (val_opt) |v| v.asUint() else null;
+            @field(opts, field_name) = if (val_opt) |v| v.asUint() else null;
         } else if (FT == f32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(f32, @floatCast(v.asFloat() orelse 0.0)) else 0.0;
+            @field(opts, field_name) = if (val_opt) |v| @as(f32, @floatCast(v.asFloat() orelse 0.0)) else 0.0;
         } else if (FT == ?f32) {
-            @field(opts, field.name) = if (val_opt) |v| @as(?f32, @floatCast(v.asFloat())) else null;
+            @field(opts, field_name) = if (val_opt) |v| @as(?f32, @floatCast(v.asFloat())) else null;
         } else if (FT == f64) {
-            @field(opts, field.name) = if (val_opt) |v| (v.asFloat() orelse 0.0) else 0.0;
+            @field(opts, field_name) = if (val_opt) |v| (v.asFloat() orelse 0.0) else 0.0;
         } else if (FT == ?f64) {
-            @field(opts, field.name) = if (val_opt) |v| v.asFloat() else null;
+            @field(opts, field_name) = if (val_opt) |v| v.asFloat() else null;
         } else if (@typeInfo(FT) == .@"enum") {
             const enum_info = @typeInfo(FT).@"enum";
             if (val_opt) |v| {
                 const str = v.asString() orelse return error.InvalidValue;
                 inline for (enum_info.fields) |ef| {
                     if (std.mem.eql(u8, ef.name, str)) {
-                        @field(opts, field.name) = @field(InnerType, ef.name);
+                        @field(opts, field_name) = @field(InnerType, ef.name);
                         break;
                     }
                 } else return error.InvalidValue;
@@ -2521,7 +2537,7 @@ pub fn parseInto(
                 const default_str = if (enum_info.fields.len > 0) enum_info.fields[0].name else "";
                 inline for (enum_info.fields) |ef| {
                     if (std.mem.eql(u8, ef.name, default_str)) {
-                        @field(opts, field.name) = @field(InnerType, ef.name);
+                        @field(opts, field_name) = @field(InnerType, ef.name);
                         break;
                     }
                 }
@@ -2533,12 +2549,12 @@ pub fn parseInto(
                 const str = v.asString() orelse return error.InvalidValue;
                 inline for (enum_info.fields) |ef| {
                     if (std.mem.eql(u8, ef.name, str)) {
-                        @field(opts, field.name) = @field(InnerEnum, ef.name);
+                        @field(opts, field_name) = @field(InnerEnum, ef.name);
                         break;
                     }
                 } else return error.InvalidValue;
             } else {
-                @field(opts, field.name) = null;
+                @field(opts, field_name) = null;
             }
         }
     }
@@ -3280,7 +3296,7 @@ test "disableUpdateCheck and enableUpdateCheck" {
 
 test "getLibraryVersion" {
     const ver = getLibraryVersion();
-    try std.testing.expectEqualStrings("0.0.7", ver);
+    try std.testing.expectEqualStrings("0.0.8", ver);
 }
 
 test "ArgumentParser subcommand" {

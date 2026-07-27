@@ -13,16 +13,16 @@ head:
 
 ## Prerequisites
 
-- **Zig 0.16.0** or later.
+- **Zig 0.16.0** or later (also compatible with Zig 0.17+).
 
 ## Adding to your Project
 
 ### Release Installation (Recommended)
 
-To install the latest stable release for zig v0.16 (v0.0.7), verify the hash and add it to your `build.zig.zon` by running:
+To install the latest stable release for zig v0.16+ (v0.0.8), verify the hash and add it to your `build.zig.zon` by running:
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz
 ```
 
 Install the supported release for zig v0.15 (v0.0.4):

@@ -21,16 +21,12 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("args", args_module);
 
-    const install_exe = b.addInstallArtifact(exe, .{});
+    b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
-    run_exe.step.dependOn(&install_exe.step);
-    if (b.args) |args| {
-        run_exe.addArgs(args);
-    }
+    run_exe.step.dependOn(b.getInstallStep());
+    run_exe.addPassthruArgs();
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_exe.step);
-
-    b.installArtifact(exe);
 }

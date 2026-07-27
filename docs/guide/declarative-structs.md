@@ -11,6 +11,16 @@ head:
 
 Instead of manually adding options one by one, `args.zig` allows you to define your configuration as a standard Zig struct and parse arguments directly into it using `parseInto` (or its alias `derive`).
 
+> [!TIP]
+> For the simplest syntax when parsing process args, use `parseProcessInto`:
+> ```zig
+> var parsed = try args.parseProcessInto(allocator, Config, .{ .name = "myapp" }, init);
+> ```
+> Or use `parseInto` with `null` for the same result:
+> ```zig
+> var parsed = try args.parseInto(allocator, Config, .{ .name = "myapp" }, null, init);
+> ```
+
 ## Use Cases
 
 This approach is ideal for:
@@ -24,6 +34,9 @@ This approach is ideal for:
 ## How it Works
 
 The library inspects your struct fields at compile-time and generates the corresponding `ArgSpec` list.
+
+> [!NOTE]
+> Field names are automatically converted to kebab-case (e.g., `dry_run` becomes `--dry-run`). Types are mapped to the appropriate argument type at compile-time.
 
 - **Field Names**: Converted to kebab-case (e.g., `dry_run` becomes `--dry-run`).
 - **Types**: Mapped to argument types:
@@ -77,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
     var parsed = try args.parseInto(allocator, Config, .{
         .name = "myapp",
         .description = "Struct-based parsing demo",
-    }, null);
+    }, null, init);
     defer parsed.deinit();
 
     const cfg = parsed.options;
@@ -114,7 +127,8 @@ Port: 8080
 
 ## Limitations and How to Handle Complex Cases
 
-The `parseInto` approach is designed for simple to moderately complex CLIs. For advanced use cases, you can combine approaches:
+> [!WARNING]
+> The `parseInto` approach is designed for simple to moderately complex CLIs. For advanced use cases (multi-value options, choices, subcommands), combine with the `ArgumentParser` API.
 
 ### Limitation 1: No Multi-Value Options
 
@@ -131,7 +145,7 @@ var result = try parser.parseProcess(init);
 defer result.deinit();
 
 // Access multiple values
-const includes = result.getList("include"); // Returns slice of values
+const includes = result.getArray("include"); // Returns slice of values
 ```
 
 ### Limitation 2: No Choices or Validation
@@ -163,7 +177,8 @@ try parser.addSubcommand(.{
 
 ## Hybrid Approach: Combining Both Methods
 
-You can use the derived specs as a starting point and add more options manually:
+> [!TIP]
+> You can use the derived specs as a starting point and add more options manually:
 
 ```zig
 const Config = struct {
@@ -204,8 +219,12 @@ For a more concise API, use the `derive` alias:
 
 ```zig
 // These are equivalent:
-var parsed = try args.parseInto(allocator, Config, options, null);
-var parsed = try args.derive(allocator, Config, options, null);
+var parsed = try args.parseInto(allocator, Config, options, null, init);
+var parsed = try args.derive(allocator, Config, options, null, init);
+
+// Or use parseProcessInto / deriveProcess for shorter syntax:
+var parsed = try args.parseProcessInto(allocator, Config, options, init);
+var parsed = try args.deriveProcess(allocator, Config, options, init);
 ```
 
 ## Using Global Configuration
@@ -223,7 +242,7 @@ args.configure(.{
 // parseInto will use these defaults
 var parsed = try args.parseInto(allocator, Config, .{
     .name = "", // Uses app_name from global config
-}, null);
+}, null, init);
 defer parsed.deinit();
 ```
 
@@ -232,7 +251,7 @@ defer parsed.deinit();
 The returned `ParseIntoResult` contains both the typed options and the raw parse result:
 
 ```zig
-var parsed = try args.parseInto(allocator, Config, options, null);
+var parsed = try args.parseInto(allocator, Config, options, null, init);
 defer parsed.deinit();
 
 // Typed access (from struct)

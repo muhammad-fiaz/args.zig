@@ -16,7 +16,7 @@ This document covers all core types and compile-time version constants in args.z
 The library exposes the following compile-time constants for versioning:
 
 ```zig
-pub const VERSION = "0.0.7";
+pub const VERSION = "0.0.8";
 ```
 
 ## ValueType
@@ -139,7 +139,6 @@ pub const ParseResult = struct {
 | `getSize(name)` | `?u64` | Get byte-size value (or null) |
 | `contains(name)` | `bool` | Check if a value exists |
 | `positionalCount()` | `usize` | Count of positional arguments |
-| `getPositional(index)` | `?[]const u8` | Get positional argument by index |
 
 ### Fallback Methods (getOr*)
 
@@ -348,6 +347,7 @@ pub const Shell = enum {
     zsh,
     fish,
     powershell,
+    nushell,
 };
 ```
 
@@ -379,6 +379,7 @@ pub const DecodeMode = enum {
     none,
     base64_std,
     base64_url_safe,
+    hex,
 };
 ```
 

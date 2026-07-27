@@ -1,6 +1,6 @@
 # args.zig Starter Project
 
-Demo CLI using [args.zig](https://github.com/muhammad-fiaz/args.zig) v0.0.7.
+Demo CLI using [args.zig](https://github.com/muhammad-fiaz/args.zig) v0.0.8.
 
 ## Prerequisites
 

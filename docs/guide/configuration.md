@@ -11,6 +11,9 @@ head:
 
 args.zig provides flexible configuration options to customize parser behavior.
 
+> [!TIP]
+> Use preset configs like `args.Config.default()`, `args.Config.minimal()`, or `args.Config.ci()` for quick setup. Override individual fields as needed.
+
 ## Config Struct
 
 ```zig
@@ -258,7 +261,7 @@ var parser = try args.ArgumentParser.init(allocator, .{
 const Config = struct { verbose: bool };
 var parsed = try args.parseInto(allocator, Config, .{
     .name = "", // Uses app_name from global config
-}, null);
+}, null, init);
 
 ```
 
@@ -367,7 +370,8 @@ When disabled, `--no-<name>` is treated as unknown.
 
 ## Configuration Validation & Auto-Resolution
 
-args.zig includes a built-in static analysis engine for configuration to detect conflicting or redundant flags at runtime and auto-resolve them safely.
+> [!NOTE]
+> args.zig includes a built-in static analysis engine for configuration to detect conflicting or redundant flags at runtime and auto-resolve them safely.
 
 ### Config Warnings & Severity
 

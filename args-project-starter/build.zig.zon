@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .args = .{
-            .path = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz",
+            .path = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz",
         },
     },
     .paths = .{

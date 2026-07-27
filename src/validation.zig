@@ -35,11 +35,8 @@ fn decodeHex(allocator: std.mem.Allocator, raw: []const u8) !DecodedValue {
     const decoded_len = raw.len / 2;
     const decoded = try allocator.alloc(u8, decoded_len);
     errdefer allocator.free(decoded);
-    for (0..decoded_len) |i| {
-        const hi = std.fmt.charToDigit(raw[i * 2], 16) catch return error.InvalidValue;
-        const lo = std.fmt.charToDigit(raw[i * 2 + 1], 16) catch return error.InvalidValue;
-        decoded[i] = @as(u8, @intCast(hi * 16 + lo));
-    }
+    // std.fmt.hexToBytes handles the full decode in one stdlib call.
+    _ = std.fmt.hexToBytes(decoded, raw) catch return error.InvalidValue;
     return .{ .value = decoded, .owned = decoded };
 }
 
@@ -150,12 +147,11 @@ pub fn validateFileName(file_name: []const u8) bool {
     if (file_name.len == 0) return false;
     if (std.mem.eql(u8, file_name, ".") or std.mem.eql(u8, file_name, "..")) return false;
 
-    // Disallow path separators and common invalid filename characters.
+    // Disallow control chars, path separators, and Windows-invalid characters.
     for (file_name) |c| {
         if (c < 32) return false;
-        if (c == '/' or c == '\\') return false;
-        if (c == '<' or c == '>' or c == ':' or c == '"' or c == '|' or c == '?' or c == '*') return false;
     }
+    if (std.mem.indexOfAny(u8, file_name, "/\\<>:\"|?*") != null) return false;
 
     // Windows compatibility: no trailing dot or space.
     const last = file_name[file_name.len - 1];
@@ -316,11 +312,10 @@ pub fn validateJsonValue(value: []const u8) bool {
 }
 
 /// Validates a four-digit year string (`YYYY`).
+/// Relies entirely on parseInt — the digit-only check is implicit since
+/// parseInt(u16) already rejects any non-digit character.
 pub fn validateYear(value: []const u8) bool {
     if (value.len != 4) return false;
-    for (value) |c| {
-        if (!std.ascii.isDigit(c)) return false;
-    }
     _ = std.fmt.parseInt(u16, value, 10) catch return false;
     return true;
 }
@@ -348,25 +343,13 @@ pub fn validateTime24(value: []const u8) bool {
 pub fn validateHostName(value: []const u8) bool {
     if (value.len == 0 or value.len > 253) return false;
 
-    var label_start: usize = 0;
-    var idx: usize = 0;
-    while (idx <= value.len) : (idx += 1) {
-        const is_end = idx == value.len or value[idx] == '.';
-        if (!is_end) continue;
-
-        const label = value[label_start..idx];
+    var it = std.mem.splitScalar(u8, value, '.');
+    while (it.next()) |label| {
         if (label.len == 0 or label.len > 63) return false;
-
-        const first = label[0];
-        const last = label[label.len - 1];
-        if (!std.ascii.isAlphanumeric(first) or !std.ascii.isAlphanumeric(last)) return false;
-
+        if (!std.ascii.isAlphanumeric(label[0]) or !std.ascii.isAlphanumeric(label[label.len - 1])) return false;
         for (label) |c| {
-            if (std.ascii.isAlphanumeric(c) or c == '-') continue;
-            return false;
+            if (!std.ascii.isAlphanumeric(c) and c != '-') return false;
         }
-
-        label_start = idx + 1;
     }
 
     return true;
@@ -418,6 +401,14 @@ pub fn validateBase64(value: []const u8) bool {
     if (value.len == 0) return false;
     const decoder = std.base64.standard.Decoder;
     const decoded_len = decoder.calcSizeForSlice(value) catch return false;
+    // 4 KB covers virtually all CLI-passed base64 values with zero heap use.
+    var stack_buf: [4096]u8 = undefined;
+    if (decoded_len <= stack_buf.len) {
+        decoder.decode(stack_buf[0..decoded_len], value) catch return false;
+        return true;
+    }
+    // For unusually large values fall back to the page allocator.
+    // std.heap.stackFallback was removed in Zig 0.17, so we go direct.
     const decoded = std.heap.page_allocator.alloc(u8, decoded_len) catch return false;
     defer std.heap.page_allocator.free(decoded);
     decoder.decode(decoded, value) catch return false;
@@ -440,7 +431,7 @@ pub fn validateMacAddress(value: []const u8) bool {
 /// Validates that a string contains only ASCII characters.
 pub fn validateAsciiOnly(value: []const u8) bool {
     for (value) |c| {
-        if (c > 127) return false;
+        if (!std.ascii.isAscii(c)) return false;
     }
     return true;
 }

@@ -22,32 +22,51 @@ pub const RequiredIf = struct {
 };
 
 /// Derives specific arguments from a struct type.
+/// Compatible with Zig 0.16 (builtin.Type.Struct.fields) and
+/// Zig 0.17 (lang.Type.Struct.field_names / field_types / field_attrs).
 pub fn deriveOptions(comptime T: type) []const ArgSpec {
     if (@typeInfo(T) != .@"struct") @compileError("deriveOptions requires a struct type, found " ++ @typeName(T));
 
-    const fields = @typeInfo(T).@"struct".fields;
-    comptime var specs: [fields.len]ArgSpec = undefined;
+    // Normalise the two stdlib representations into a single field count.
+    const info = @typeInfo(T).@"struct";
+    const field_count = comptime if (@hasField(@TypeOf(info), "fields"))
+        info.fields.len
+    else
+        info.field_names.len;
 
-    inline for (fields, 0..) |field, i| {
+    comptime var specs: [field_count]ArgSpec = undefined;
+
+    comptime var i: usize = 0;
+    inline while (i < field_count) : (i += 1) {
+        // Extract field name and type in a version-compatible way.
+        const field_name: []const u8 = if (@hasField(@TypeOf(info), "fields"))
+            info.fields[i].name
+        else
+            info.field_names[i];
+
+        const FieldType: type = if (@hasField(@TypeOf(info), "fields"))
+            info.fields[i].type
+        else
+            info.field_types[i];
+
         const kebab_name = comptime blk: {
-            var buf: [field.name.len]u8 = undefined;
-            for (field.name, 0..) |c, j| {
+            var buf: [field_name.len]u8 = undefined;
+            for (field_name, 0..) |c, j| {
                 buf[j] = if (c == '_') '-' else c;
             }
             const final_buf = buf;
             break :blk final_buf;
         };
-        const name_slice = &kebab_name;
+        const name_slice: []const u8 = &kebab_name;
 
+        // Duplicate name check.
         inline for (0..i) |prev_idx| {
             if (std.mem.eql(u8, specs[prev_idx].name, name_slice)) {
                 @compileError("Duplicate argument name derived from struct: " ++ name_slice);
             }
         }
 
-        const FieldType = field.type;
         const InnerType = if (@typeInfo(FieldType) == .optional) @typeInfo(FieldType).optional.child else FieldType;
-
         const is_enum = @typeInfo(InnerType) == .@"enum";
 
         const value_type: ValueType = if (FieldType == bool or FieldType == ?bool)

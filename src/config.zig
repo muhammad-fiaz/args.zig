@@ -366,7 +366,7 @@ pub fn initConfigAutoResolve(cfg: Config) void {
                 .@"error" => constants.Defaults.error_prefix,
             };
             const color = switch (w.severity) {
-                .note => theme.info,
+                .note => theme.accent,
                 .warning => theme.warning,
                 .@"error" => theme.error_color,
             };

@@ -560,7 +560,7 @@ pub fn main(init: std.process.Init) !void {
 
     var parsed = try args.parseInto(allocator, Config, .{
         .name = "struct-demo",
-    }, null);
+    }, null, init);
     defer parsed.deinit();
 
     const cfg = parsed.options;
@@ -1035,7 +1035,10 @@ pub fn main() !void {
         .suggestion_max_distance = 0,
     };
 
-    var ap = try args.createParserWithConfig(allocator, "config-warnings-demo", cfg);
+    var ap = try args.ArgumentParser.init(allocator, .{
+        .name = "config-warnings-demo",
+        .config = cfg,
+    });
     defer ap.deinit();
 
     var warn_buf: [16]args.config.ConfigWarning = undefined;
@@ -1100,7 +1103,7 @@ pub fn main(init: std.process.Init) !void {
     defer parser.deinit();
 
     try parser.addBracketedListOption("tags", .{ .short = 't' });
-    try parser.addBracketedListOption("files", .{ .short = 'f', .bracket_type = .curly });
+    try parser.addBracketedListOption("files", .{ .short = 'f' });
 
     var result = try parser.parseProcess(init);
     defer result.deinit();
@@ -1261,13 +1264,104 @@ pub fn main(init: std.process.Init) !void {
 zig build run-multi_value -- --source a.txt b.txt c.txt ./output
 ```
 
+## Export / Introspection Example
+
+Enumerate all registered arguments, subcommands, and groups at runtime:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "export-example",
+        .version = "1.0.0",
+        .description = "Demonstrates the export / introspection API",
+    });
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v', .help = "Enable verbose output" });
+    try parser.addOption("output", .{ .short = 'o', .help = "Output file path", .default = "stdout" });
+    try parser.addOption("port", .{ .short = 'p', .help = "Listen port", .value_type = .int, .default = "8080" });
+    try parser.addPositional("config", .{ .help = "Path to configuration file", .required = true });
+
+    try parser.addSubcommand(.{ .name = "serve", .help = "Start the server" });
+    try parser.addSubcommand(.{ .name = "check", .help = "Validate configuration" });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    // Enumerate all arguments
+    const all_args = parser.getAllArgs();
+    for (all_args) |arg| {
+        std.debug.print("  {s} [{s}]\n", .{ arg.name, arg.value_type.typeName() });
+    }
+
+    // Enumerate subcommands
+    const subs = parser.getAllSubcommands();
+    for (subs) |sub| {
+        std.debug.print("  sub: {s}\n", .{sub.name});
+    }
+
+    // Full spec snapshot
+    const spec = parser.exportSpec();
+    std.debug.print("Total args: {d}, subs: {d}\n", .{ spec.args.len, spec.subcommands.len });
+
+    // Single lookup
+    if (parser.getArgSpec("port")) |port_spec| {
+        std.debug.print("Port default: {s}\n", .{port_spec.default orelse "none"});
+    }
+}
+```
+
+**Usage:**
+```bash
+export_args --config app.toml           # basic usage
+export_args serve --port 3000 app.toml  # with subcommand
+```
+
+**Output:**
+```
+=== Registered Arguments (4) ===
+  verbose  (-v)  [BOOL]  -- Enable verbose output
+  output   (-o)  [STRING]  (default: stdout)  -- Output file path
+  port     (-p)  [INT]  (default: 8080)  -- Listen port
+  config   [STRING]  REQUIRED  -- Path to configuration file
+
+=== Subcommands (2) ===
+  serve  -- Start the server
+  check  -- Validate configuration
+
+=== Full Spec Snapshot ===
+  name:    export-example
+  version: 1.0.0
+  args:    4
+  subs:    2
+```
+
+**Available export methods:**
+
+| Method | Returns |
+|--------|---------|
+| `getAllArgs()` | `[]const ArgSpec` -- all registered arguments |
+| `getAllSubcommands()` | `[]const SubcommandSpec` -- all subcommands |
+| `getAllGroups()` | `[]const ArgumentGroup` -- all argument groups |
+| `getAllMutualExclusions()` | Mutual exclusion groups |
+| `exportSpec()` | Full `CommandSpec` snapshot |
+| `getArgSpec(name)` | Single `ArgSpec` lookup by name/long/dest/alias |
+| `totalArgCount()` | Count of arguments |
+| `totalSubcommandCount()` | Count of subcommands |
+| `totalGroupCount()` | Count of groups |
+
 ## Running the Examples
 
 Build and run examples with:
 
 ```bash
 # Build all examples
-zig build
+zig build -Dbuild-examples=true
 
 # Run basic example
 zig build run-basic
@@ -1277,6 +1371,9 @@ zig build run-bool_options
 
 # Run advanced example
 zig build run-advanced
+
+# Run export/introspection example
+zig build run-export_args
 
 # Run conflict demo example
 zig build run-conflict_demo
@@ -1310,4 +1407,312 @@ zig build run-validation_demo
 
 # Run update check example
 zig build run-update_check
+
+# Run prefix option example
+zig build run-prefix_option
+
+# Run secret option example
+zig build run-secret_option
+
+# Run range validation example
+zig build run-range_validation
+
+# Run env option example
+zig build run-env_option
+
+# Run result accessors example
+zig build run-result_accessors
+
+# Run schema builder example
+zig build run-schema_builder
+
+# Run quick parse example
+zig build run-quick_parse
+```
+
+## Prefix Option Example
+
+Demonstrates `addPrefixOption` for `--with-*`, `--enable-*`, `--disable-*` style flags:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "prefix-example",
+        .description = "Demonstrates prefix-matching options",
+    });
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v', .help = "Enable verbose output" });
+
+    // Prefix matching is handled at parse time.
+    // This registers a placeholder enabling the prefix-handling path.
+    try parser.addPrefixOption("--with-", .{
+        .name = "with",
+        .help = "Enable features matching --with-<feature> pattern",
+    });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    if (result.getBool("verbose") orelse false) {
+        std.debug.print("Verbose mode enabled\n", .{});
+    }
+    if (result.contains("with")) {
+        std.debug.print("With feature activated\n", .{});
+    }
+}
+```
+
+**Run it with:** `zig build run-prefix_option`
+
+## Secret Option Example
+
+Demonstrates `addSecretOption` for hidden password/token input:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "secret-example",
+        .description = "Demonstrates secret/hidden options",
+    });
+    defer parser.deinit();
+
+    try parser.addOption("user", .{
+        .short = 'u', .help = "Username", .required = true,
+    });
+
+    // Hidden from help text
+    try parser.addSecretOption("password", .{
+        .short = 'p', .help = "Password (hidden)", .required = true,
+    });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    std.debug.print("User: {s}\n", .{result.getString("user") orelse "unknown"});
+}
+```
+
+**Run it with:** `zig build run-secret_option`
+
+## Range Validation Example
+
+Demonstrates `addRangeOption` and `addCharRangeOption` for numeric and string-length validation:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "range-example",
+        .description = "Demonstrates range validation",
+    });
+    defer parser.deinit();
+
+    // Integer range: 1-100
+    try parser.addRangeOption("level", i32, .{
+        .short = 'l', .help = "Level (1-100)", .default = "50", .min = 1, .max = 100,
+    });
+
+    // Float range: 0.0-1.0
+    try parser.addRangeOption("threshold", f64, .{
+        .short = 't', .help = "Threshold (0.0-1.0)", .default = "0.5", .min = 0.0, .max = 1.0,
+    });
+
+    // String length: 3-20 characters
+    try parser.addCharRangeOption("username", .{
+        .short = 'u', .help = "Username (3-20 chars)", .required = true, .min = 3, .max = 20,
+    });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    std.debug.print("Level: {d}\n", .{result.getInt("level") orelse 50});
+    std.debug.print("Threshold: {d:.2}\n", .{result.getFloat("threshold") orelse 0.5});
+    std.debug.print("Username: {s}\n", .{result.getString("username") orelse "unknown"});
+}
+```
+
+**Run it with:** `zig build run-range_validation`
+
+## Environment Option Example
+
+Demonstrates `addEnvOption` with automatic env var name derivation:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "env-option-example",
+        .description = "Demonstrates automatic env var derivation",
+    });
+    defer parser.deinit();
+
+    // Auto-derives env var: "db-host" → DB_HOST
+    try parser.addEnvOption("db-host", .{
+        .short = 'h', .help = "Database host (env: DB_HOST)", .default = "localhost",
+    });
+
+    // Override with explicit env_var
+    try parser.addEnvOption("api-key", .{
+        .help = "API key (env: MYAPP_API_KEY)", .env_var = "MYAPP_API_KEY", .required = true,
+    });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    std.debug.print("Host: {s}\n", .{result.get("db-host").?.asString().?});
+    std.debug.print("Key:  {s}\n", .{result.get("api-key").?.asString().?});
+}
+```
+
+**Run it with:** `zig build run-env_option`
+
+## Result Accessors Example
+
+Demonstrates all `ParseResult` accessor methods including `getEnum`, `getDuration`, `getSize`, `isPresent`, `getCounter`, and `contains`:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+const Color = enum { red, green, blue };
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "accessors-example",
+        .description = "Demonstrates all ParseResult accessor methods",
+    });
+    defer parser.deinit();
+
+    try parser.addOption("name", .{ .short = 'n', .help = "Your name", .required = true });
+    try parser.addOption("color", .{ .help = "Color", .choices = &[_][]const u8{ "red", "green", "blue" }, .default = "blue" });
+    try parser.addDurationOption("timeout", .{ .short = 't', .help = "Timeout", .default = "30s" });
+    try parser.addSizeOption("limit", .{ .short = 'l', .help = "Size limit", .default = "1GB" });
+    try parser.addCounter("verbose", .{ .short = 'v', .help = "Verbosity" });
+    try parser.addFlag("debug", .{ .short = 'd', .help = "Debug mode" });
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    // getEnum: convert string to enum type
+    if (result.getEnum(Color, "color")) |color| {
+        std.debug.print("Color: {}\n", .{color});
+    }
+
+    // getDuration / getSize: typed accessors
+    if (result.getDuration("timeout")) |secs| {
+        std.debug.print("Timeout: {d}s\n", .{secs});
+    }
+    if (result.getSize("limit")) |bytes| {
+        std.debug.print("Limit: {d} bytes\n", .{bytes});
+    }
+
+    // isPresent: check if explicitly provided
+    std.debug.print("Name present: {}\n", .{result.isPresent("name")});
+
+    // contains: check if value exists
+    std.debug.print("Has verbose: {}\n", .{result.contains("verbose")});
+
+    // positionalCount / hasSubcommand
+    std.debug.print("Positionals: {d}\n", .{result.positionalCount()});
+    std.debug.print("Has subcommand: {}\n", .{result.hasSubcommand()});
+}
+```
+
+**Run it with:** `zig build run-result_accessors`
+
+## Schema Builder Example
+
+Demonstrates `SchemaBuilder` for programmatic schema construction:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
+    // Build schema programmatically
+    var schema = args.SchemaBuilder.init(allocator, "schema-example");
+    defer schema.deinit();
+
+    schema.addFlag(.{ .name = "verbose", .short = 'v', .help = "Verbose output" });
+    schema.addOption(.{ .name = "output", .short = 'o', .help = "Output file", .default = "out.txt" });
+    schema.addPositional(.{ .name = "input", .help = "Input file", .required = true });
+
+    // Build parser from schema
+    var parser = try schema.toParser(allocator);
+    defer parser.deinit();
+
+    var result = try parser.parseProcess(init);
+    defer result.deinit();
+
+    const input = result.getString("input") orelse "stdin";
+    const output = result.getString("output") orelse "out.txt";
+    std.debug.print("{s} -> {s}\n", .{ input, output });
+}
+```
+
+**Run it with:** `zig build run-schema_builder`
+
+## Quick Parse Example
+
+Demonstrates `quickParse`, `createParser`, and `createMinimalParser` convenience constructors:
+
+```zig
+const std = @import("std");
+const args = @import("args");
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+
+    // quickParse: one-liner with comptime specs
+    const specs = [_]args.ArgSpec{
+        .{ .name = "name", .long = "name", .short = 'n', .help = "Your name", .required = true },
+        .{ .name = "verbose", .long = "verbose", .short = 'v', .help = "Verbose", .action = .store_true },
+    };
+    var result = try args.quickParse(&specs, "quick-example", init);
+    defer result.deinit();
+
+    const name = result.getString("name") orelse "World";
+    std.debug.print("Hello, {s}!\n", .{name});
+
+    // createParser: standard defaults
+    {
+        var parser = try args.createParser(allocator, "create-example");
+        defer parser.deinit();
+        try parser.addOption("output", .{ .short = 'o', .help = "Output file" });
+        var res = try parser.parseProcess(init);
+        defer res.deinit();
+        std.debug.print("Output: {s}\n", .{res.getString("output") orelse "stdout"});
+    }
+
+    // createMinimalParser: no colors, no update check
+    {
+        var parser = try args.createMinimalParser(allocator, "minimal-example");
+        defer parser.deinit();
+        try parser.addFlag("quiet", .{ .short = 'q', .help = "Quiet mode" });
+        var res = try parser.parseProcess(init);
+        defer res.deinit();
+        std.debug.print("Quiet: {}\n", .{res.getBool("quiet") orelse false});
+    }
+}
+```
+
+**Run it with:** `zig build run-quick_parse`
 ```

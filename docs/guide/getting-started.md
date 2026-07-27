@@ -1,4 +1,4 @@
----
+﻿---
 title: Getting Started
 description: Learn how to install and set up args.zig in your Zig project. Quick start guide for command-line argument parsing.
 head:
@@ -13,17 +13,19 @@ This guide will help you get started with args.zig in your Zig project.
 
 ## Requirements
 
-- **Zig 0.16.0** or later
+> [!NOTE]
+> args.zig supports both **Zig 0.16** and **Zig 0.17**. The library automatically detects your Zig version at compile-time.
+
 - A Zig project with `build.zig` and `build.zig.zon`
 
 ## Installation
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.7):
+Install the latest stable release (v0.0.8):
 
 ```bash
-zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz
 ```
 
 Install the supported release for zig v0.15 (v0.0.4):
@@ -47,7 +49,7 @@ After running `zig fetch --save`, your `build.zig.zon` will have a dependency en
 ```zon
 .dependencies = .{
     .args = .{
-        .url = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz",
+        .url = "https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz",
         .hash = "...",
     },
 },
@@ -86,7 +88,13 @@ pub fn build(b: *std.Build) void {
 
     const run_exe = b.addRunArtifact(exe);
     run_exe.step.dependOn(&b.installArtifact(exe).step);
-    if (b.args) |args| run_exe.addArgs(args);
+    // Zig 0.17+ replaced b.args with addPassthruArgs().
+    // Zig 0.16 still uses the b.args field.
+    if (comptime builtin.zig_version.minor >= 17) {
+        run_exe.addPassthruArgs();
+    } else {
+        if (b.args) |args| run_exe.addArgs(args);
+    }
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_exe.step);
@@ -142,7 +150,7 @@ Choose a preset that matches your environment:
 // Development - balanced defaults with colors (default)
 var parser = try args.ArgumentParser.init(allocator, .{
     .name = "myapp",
-    .config = args.Config.development(),
+    .config = args.Config.default(),
 });
 
 // CI - no colors, explicit exit on error
@@ -216,10 +224,10 @@ pub fn main(init: std.process.Init) !void {
 > In Zig 0.16, the `main` function signature changed to `pub fn main(init: std.process.Init) !void`.
 >
 > `std.process.Init` provides access to:
-> - **`init.arena.allocator()`** — A scoped arena allocator tied to the process lifetime. Use this as your primary allocator; it is freed automatically on exit.
-> - **`init.minimal.args`** — The process command-line arguments, exposed through Zig's minimal startup state.
-> - **`init.io`** — A `std.Io` instance for the process, suitable for stdin, stdout, stderr, and other I/O work.
-> - **`init.environ_map`** — The process environment map, which lets args.zig resolve environment-backed options automatically.
+> - **`init.arena.allocator()`** â€” A scoped arena allocator tied to the process lifetime. Use this as your primary allocator; it is freed automatically on exit.
+> - **`init.minimal.args`** â€” The process command-line arguments, exposed through Zig's minimal startup state.
+> - **`init.io`** â€” A `std.Io` instance for the process, suitable for stdin, stdout, stderr, and other I/O work.
+> - **`init.environ_map`** â€” The process environment map, which lets args.zig resolve environment-backed options automatically.
 >
 > Always pass `init` to `parser.parseProcess(init)` when you want the parser to use the process args, I/O context, and environment map directly. Use `parser.parse(&[_][]const u8{...})` when you need a custom argument list in tests, tools, or examples.
 
@@ -296,7 +304,7 @@ zig build run -- -n Bob -e
 
 # View help
 zig build run -- --help
-# The help output is formatted for better understanding 🎨
+# The help output is formatted for better understanding ðŸŽ¨
 ```
 
 ## Validation Commands

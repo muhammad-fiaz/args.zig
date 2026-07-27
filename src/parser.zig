@@ -196,9 +196,12 @@ pub const Parser = struct {
                     @memcpy(env_key_buf[0..prefix.len], prefix);
                     env_key_buf[prefix.len] = '_';
                     @memcpy(env_key_buf[prefix.len + 1 ..][0..name.len], name);
-
                     const slice = env_key_buf[0..full_len];
-                    for (slice) |*c| c.* = std.ascii.toUpper(c.*);
+                    // Replace hyphens with underscores then uppercase in one pass.
+                    for (slice) |*c| {
+                        if (c.* == '-') c.* = '_';
+                        c.* = std.ascii.toUpper(c.*);
+                    }
                     env_key = slice;
                 }
             }
@@ -246,10 +249,8 @@ pub const Parser = struct {
             return null;
         }
 
-        if (std.ascii.toLower(name[0]) == 'n' and std.ascii.toLower(name[1]) == 'o' and name[2] == '-') {
-            return name[3..];
-        }
-
+        // Case-insensitive: use std.ascii.startsWithIgnoreCase.
+        if (std.ascii.startsWithIgnoreCase(name, "no-")) return name[3..];
         return null;
     }
 
