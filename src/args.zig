@@ -1756,6 +1756,69 @@ pub const ArgumentParser = struct {
         try self.subcommands.append(self.allocator, spec);
     }
 
+    /// Returns a read-only slice of every registered `ArgSpec`.
+    /// The returned pointers remain valid until the parser is deinitialised
+    /// or the argument list is mutated.
+    pub fn getAllArgs(self: *const ArgumentParser) []const ArgSpec {
+        return self.args.items;
+    }
+
+    /// Returns a read-only slice of every registered `SubcommandSpec`.
+    pub fn getAllSubcommands(self: *const ArgumentParser) []const SubcommandSpec {
+        return self.subcommands.items;
+    }
+
+    /// Returns a read-only slice of every registered `ArgumentGroup`.
+    pub fn getAllGroups(self: *const ArgumentParser) []const ArgumentGroup {
+        return self.groups.items;
+    }
+
+    /// Returns the mutual-exclusion groups (each group is a slice of arg names).
+    pub fn getAllMutualExclusions(self: *const ArgumentParser) []const []const []const u8 {
+        return self.mutual_exclusions.items;
+    }
+
+    /// Builds and returns the full `CommandSpec` snapshot.
+    /// This is the same object produced by `buildSpec` but available as a
+    /// convenience for callers who only need the snapshot without further
+    /// mutation.
+    pub fn exportSpec(self: *ArgumentParser) CommandSpec {
+        return self.buildSpec();
+    }
+
+    /// Looks up a single `ArgSpec` by name (or long flag / destination).
+    /// Returns `null` if no argument matches.
+    pub fn getArgSpec(self: *const ArgumentParser, name: []const u8) ?ArgSpec {
+        for (self.args.items) |arg| {
+            if (utils.eql(arg.name, name)) return arg;
+            if (arg.long) |long| {
+                if (utils.eql(long, name)) return arg;
+            }
+            if (arg.dest) |dest| {
+                if (utils.eql(dest, name)) return arg;
+            }
+            for (arg.aliases) |alias| {
+                if (utils.eql(alias, name)) return arg;
+            }
+        }
+        return null;
+    }
+
+    /// Returns the number of registered arguments (including hidden ones).
+    pub fn totalArgCount(self: *const ArgumentParser) usize {
+        return self.args.items.len;
+    }
+
+    /// Returns the number of registered subcommands.
+    pub fn totalSubcommandCount(self: *const ArgumentParser) usize {
+        return self.subcommands.items.len;
+    }
+
+    /// Returns the number of registered argument groups.
+    pub fn totalGroupCount(self: *const ArgumentParser) usize {
+        return self.groups.items.len;
+    }
+
     /// Builds the internal command specification.
     pub fn buildSpec(self: *ArgumentParser) CommandSpec {
         return .{
@@ -2434,6 +2497,8 @@ pub fn parse(
 /// defer result.deinit();
 /// std.debug.print("Verbose: {}\n", .{result.options.verbose});
 /// ```
+///
+/// For a shorter syntax when parsing process args, see `parseProcessInto`.
 pub fn parseInto(
     allocator: std.mem.Allocator,
     comptime T: type,
@@ -2527,17 +2592,17 @@ pub fn parseInto(
             const enum_info = @typeInfo(FT).@"enum";
             if (val_opt) |v| {
                 const str = v.asString() orelse return error.InvalidValue;
-                inline for (enum_info.fields) |ef| {
-                    if (std.mem.eql(u8, ef.name, str)) {
-                        @field(opts, field_name) = @field(InnerType, ef.name);
+                inline for (enum_info.field_names) |ef_name| {
+                    if (std.mem.eql(u8, ef_name, str)) {
+                        @field(opts, field_name) = @field(InnerType, ef_name);
                         break;
                     }
                 } else return error.InvalidValue;
             } else {
-                const default_str = if (enum_info.fields.len > 0) enum_info.fields[0].name else "";
-                inline for (enum_info.fields) |ef| {
-                    if (std.mem.eql(u8, ef.name, default_str)) {
-                        @field(opts, field_name) = @field(InnerType, ef.name);
+                const default_str = if (enum_info.field_names.len > 0) enum_info.field_names[0] else "";
+                inline for (enum_info.field_names) |ef_name| {
+                    if (std.mem.eql(u8, ef_name, default_str)) {
+                        @field(opts, field_name) = @field(InnerType, ef_name);
                         break;
                     }
                 }
@@ -2547,9 +2612,9 @@ pub fn parseInto(
             const enum_info = @typeInfo(InnerEnum).@"enum";
             if (val_opt) |v| {
                 const str = v.asString() orelse return error.InvalidValue;
-                inline for (enum_info.fields) |ef| {
-                    if (std.mem.eql(u8, ef.name, str)) {
-                        @field(opts, field_name) = @field(InnerEnum, ef.name);
+                inline for (enum_info.field_names) |ef_name| {
+                    if (std.mem.eql(u8, ef_name, str)) {
+                        @field(opts, field_name) = @field(InnerEnum, ef_name);
                         break;
                     }
                 } else return error.InvalidValue;
@@ -2602,6 +2667,20 @@ pub fn getLibraryVersion() []const u8 {
 
 /// Alias for `parseInto`. Parses arguments directly into a struct type.
 pub const derive = parseInto;
+
+/// Convenience: parse process args into a struct type.
+/// Usage: var parsed = try args.parseProcessInto(allocator, Config, .{ .name = "myapp" }, init);
+pub fn parseProcessInto(
+    allocator: std.mem.Allocator,
+    comptime T: type,
+    options: ArgumentParser.InitOptions,
+    init: std.process.Init,
+) !ParseIntoResult(T) {
+    return parseInto(allocator, T, options, null, init);
+}
+
+/// Alias for `parseProcessInto`.
+pub const deriveProcess = parseProcessInto;
 
 /// Alias for `initConfig`. Sets global configuration.
 pub const configure = initConfig;
@@ -4291,6 +4370,100 @@ test "ArgumentParser conflicts and requirements" {
     try std.testing.expect(result.contains("output"));
 }
 
+test "ArgumentParser getAllArgs export" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "export-test",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFlag("verbose", .{ .short = 'v', .help = "Enable verbose mode" });
+    try ap.addOption("output", .{ .short = 'o', .help = "Output file" });
+    try ap.addPositional("input", .{ .help = "Input file" });
+
+    const all_args = ap.getAllArgs();
+    try std.testing.expectEqual(@as(usize, 3), all_args.len);
+
+    try std.testing.expectEqualStrings("verbose", all_args[0].name);
+    try std.testing.expect(all_args[0].short == 'v');
+    try std.testing.expect(all_args[0].action == .store_true);
+
+    try std.testing.expectEqualStrings("output", all_args[1].name);
+    try std.testing.expect(all_args[1].short == 'o');
+
+    try std.testing.expectEqualStrings("input", all_args[2].name);
+    try std.testing.expect(all_args[2].positional);
+}
+
+test "ArgumentParser getArgSpec lookup" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "lookup-test",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFlag("verbose", .{ .short = 'v' });
+    try ap.addOption("output", .{ .short = 'o', .dest = "out_file" });
+
+    // Lookup by name
+    const v = ap.getArgSpec("verbose");
+    try std.testing.expect(v != null);
+    try std.testing.expect(v.?.action == .store_true);
+
+    // Lookup by short flag name is not supported directly (short is a u8)
+    // but lookup by dest works
+    const o = ap.getArgSpec("out_file");
+    try std.testing.expect(o != null);
+    try std.testing.expectEqualStrings("output", o.?.name);
+
+    // Missing argument
+    try std.testing.expect(ap.getArgSpec("nonexistent") == null);
+}
+
+test "ArgumentParser exportSpec returns full snapshot" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "snapshot-test",
+        .version = "1.0.0",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFlag("verbose", .{});
+    try ap.addSubcommand(.{ .name = "init", .help = "Initialize" });
+
+    const spec = ap.exportSpec();
+    try std.testing.expectEqualStrings("snapshot-test", spec.name);
+    try std.testing.expectEqualStrings("1.0.0", spec.version.?);
+    try std.testing.expectEqual(@as(usize, 1), spec.args.len);
+    try std.testing.expectEqual(@as(usize, 1), spec.subcommands.len);
+    try std.testing.expectEqualStrings("init", spec.subcommands[0].name);
+}
+
+test "ArgumentParser count methods" {
+    const allocator = std.testing.allocator;
+
+    var ap = try ArgumentParser.init(allocator, .{
+        .name = "count-test",
+        .config = Config.minimal(),
+    });
+    defer ap.deinit();
+
+    try ap.addFlag("verbose", .{});
+    try ap.addOption("output", .{});
+    try ap.addArgumentGroup("Network", .{});
+    try ap.addSubcommand(.{ .name = "serve" });
+
+    try std.testing.expectEqual(@as(usize, 2), ap.totalArgCount());
+    try std.testing.expectEqual(@as(usize, 1), ap.totalSubcommandCount());
+    try std.testing.expectEqual(@as(usize, 1), ap.totalGroupCount());
+}
+
 test "ArgumentParser conditional requirements and mutual exclusion" {
     const allocator = std.testing.allocator;
     config.initConfig(Config.testing());
@@ -4381,8 +4554,6 @@ test "ArgumentParser config auto-resolve and warnings" {
     try std.testing.expect(!ap.cfg.exit_on_error);
     try std.testing.expect(!ap.cfg.use_colors);
 }
-
-// ─── New Feature Tests ─────────────────────────────────────────────
 
 test "utils.parseBracketedList parses curly braces" {
     const allocator = std.testing.allocator;

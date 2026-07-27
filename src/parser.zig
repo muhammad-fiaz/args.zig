@@ -95,10 +95,21 @@ pub const Parser = struct {
         var explicit_seen = std.StringHashMap(void).init(self.allocator);
         defer explicit_seen.deinit();
 
+        // Validate defaults early (fail fast on invalid defaults), but don't add
+        // to result yet — env vars and CLI args take priority over defaults.
         for (self.spec.args) |arg| {
             if (arg.default) |def| {
-                const value = try self.parseOwnedValue(&result, def, arg.value_type);
-                try result.put(arg.getDestination(), value);
+                if (arg.validator) |v| {
+                    const res = v(self.io, def);
+                    if (!res.isOk()) {
+                        if (res.getMessage()) |msg| {
+                            self.emitError("default value for '{s}' is invalid: {s}\n", .{ arg.name, msg });
+                        } else {
+                            self.emitError("default value for '{s}' failed validation\n", .{arg.name});
+                        }
+                        return errors.ValidationError.CustomValidationFailed;
+                    }
+                }
             }
         }
 
@@ -166,7 +177,18 @@ pub const Parser = struct {
             }
         }
 
+        // Env vars override defaults but not CLI args.
         try self.processEnvVars(&result);
+
+        // Apply defaults last (only for args not set by CLI or env vars).
+        for (self.spec.args) |arg| {
+            if (result.contains(arg.getDestination())) continue;
+            if (arg.default) |def| {
+                const value = try self.parseOwnedValue(&result, def, arg.value_type);
+                try result.put(arg.getDestination(), value);
+            }
+        }
+
         try self.validateRequired(&result);
         self.validateDeprecations(&result);
         try self.validateConflicts(&result);
@@ -208,6 +230,18 @@ pub const Parser = struct {
 
             if (env_key) |key| {
                 if (env_map.get(key)) |env_val| {
+                    // Validate env var value against the argument's validator if present.
+                    if (arg.validator) |v| {
+                        const res = v(self.io, env_val);
+                        if (!res.isOk()) {
+                            if (res.getMessage()) |msg| {
+                                self.emitError("environment variable {s} for '{s}' is invalid: {s}\n", .{ key, arg.name, msg });
+                            } else {
+                                self.emitError("environment variable {s} for '{s}' failed validation\n", .{ key, arg.name });
+                            }
+                            return errors.ValidationError.CustomValidationFailed;
+                        }
+                    }
                     const value = try self.parseOwnedValue(result, env_val, arg.value_type);
                     try result.put(arg.getDestination(), value);
                 }
@@ -856,10 +890,8 @@ pub const Parser = struct {
             }
         }
 
-        const raw_buf = try self.allocator.alloc(u8, count * @sizeOf([]const u8));
-        errdefer self.allocator.free(raw_buf);
-
-        const buf: [][]const u8 = @ptrCast(@alignCast(raw_buf));
+        const buf = try self.allocator.alloc([]const u8, count);
+        errdefer self.allocator.free(buf);
 
         var idx: usize = 0;
         var it = std.mem.splitScalar(u8, inner, separator);
@@ -871,7 +903,7 @@ pub const Parser = struct {
             }
         }
 
-        try result.ownSlice(raw_buf);
+        try result.ownArray(buf);
         return .{ .array = buf[0..count] };
     }
 
@@ -899,9 +931,8 @@ pub const Parser = struct {
         }
 
         // Allocate and collect values
-        const buf = try self.allocator.alloc(u8, count * @sizeOf([]const u8));
-        errdefer self.allocator.free(buf);
-        const items: [][]const u8 = @ptrCast(@alignCast(buf));
+        const items = try self.allocator.alloc([]const u8, count);
+        errdefer self.allocator.free(items);
 
         for (saved_indices.items, 0..) |idx, i| {
             const decoded = if (self.cfg.allow_brackets)
@@ -912,7 +943,7 @@ pub const Parser = struct {
         }
         saved_indices.deinit(self.allocator);
 
-        try result.ownSlice(buf);
+        try result.ownArray(items);
         return .{ .array = items[0..count] };
     }
 
@@ -925,14 +956,13 @@ pub const Parser = struct {
             null;
 
         const new_len = if (old_arr) |a| a.len + 1 else 1;
-        const raw_buf = try self.allocator.alloc(u8, new_len * @sizeOf([]const u8));
-        errdefer self.allocator.free(raw_buf);
-        const buf: [][]const u8 = @ptrCast(@alignCast(raw_buf));
+        const buf = try self.allocator.alloc([]const u8, new_len);
+        errdefer self.allocator.free(buf);
         if (old_arr) |a| {
             for (a, 0..) |item, i| buf[i] = item;
         }
         buf[new_len - 1] = owned;
-        try result.ownSlice(raw_buf);
+        try result.ownArray(buf);
         try result.put(dest, .{ .array = buf[0..new_len] });
     }
 
@@ -1250,7 +1280,7 @@ test "Parser inline value" {
     try std.testing.expectEqualStrings("result.txt", result.getString("output").?);
 }
 
-test "Parser positional arguments" {
+test "Parser positional arguments with position field" {
     const allocator = std.testing.allocator;
     config_mod.initConfig(.{ .exit_on_error = false });
     defer config_mod.resetConfig();
@@ -1879,4 +1909,852 @@ test "Parser array value with separator via inline" {
     try std.testing.expectEqualStrings("a", arr[0]);
     try std.testing.expectEqualStrings("b", arr[1]);
     try std.testing.expectEqualStrings("c", arr[2]);
+}
+
+test "Parser default value validation rejects out-of-range default" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "level",
+                .long = "level",
+                .value_type = .int,
+                .default = "99",
+                .validator = validation.Validators.intRange(1, 10),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    try std.testing.expectError(errors.ValidationError.CustomValidationFailed, parser.parse(&args));
+}
+
+test "Parser default value validation accepts valid default" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "level",
+                .long = "level",
+                .value_type = .int,
+                .default = "5",
+                .validator = validation.Validators.intRange(1, 10),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+    try std.testing.expectEqual(@as(i64, 5), result.getInt("level").?);
+}
+
+test "Parser default value validation no validator passes" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "name", .long = "name", .default = "hello" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+    try std.testing.expectEqualStrings("hello", result.getString("name").?);
+}
+
+test "Parser float range validation" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "threshold",
+                .long = "threshold",
+                .value_type = .float,
+                .validator = validation.Validators.floatRange(0.0, 1.0),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    {
+        const args = [_][]const u8{ "--threshold", "0.5" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getFloat("threshold").? >= 0.49);
+    }
+
+    {
+        const args = [_][]const u8{ "--threshold", "2.0" };
+        try std.testing.expectError(errors.ValidationError.CustomValidationFailed, parser.parse(&args));
+    }
+}
+
+test "Parser char range validation" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "username",
+                .long = "username",
+                .value_type = .string,
+                .validator = validation.Validators.charRange(3, 20),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    {
+        const args = [_][]const u8{ "--username", "alice" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("alice", result.getString("username").?);
+    }
+
+    {
+        const args = [_][]const u8{ "--username", "ab" };
+        try std.testing.expectError(errors.ValidationError.CustomValidationFailed, parser.parse(&args));
+    }
+
+    {
+        const args = [_][]const u8{ "--username", "thisusernameistoolongfortherange" };
+        try std.testing.expectError(errors.ValidationError.CustomValidationFailed, parser.parse(&args));
+    }
+}
+
+test "Parser format validation" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "format",
+                .long = "format",
+                .value_type = .string,
+                .validator = validation.Validators.allOf(&[_]validation.ValidatorFn{
+                    validation.Validators.json,
+                }),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    {
+        const args = [_][]const u8{ "--format", "{\"key\":\"value\"}" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getString("format") != null);
+    }
+}
+
+test "Parser array append values" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "include",
+                .long = "include",
+                .short = 'I',
+                .value_type = .string,
+                .action = .append,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "-I", "foo", "-I", "bar", "-I", "baz" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const arr = result.getArray("include").?;
+    try std.testing.expectEqual(@as(usize, 3), arr.len);
+    try std.testing.expectEqualStrings("foo", arr[0]);
+    try std.testing.expectEqualStrings("bar", arr[1]);
+    try std.testing.expectEqualStrings("baz", arr[2]);
+}
+
+test "Parser list option with custom separator" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "tags",
+                .long = "tags",
+                .value_type = .array,
+                .separator = ':',
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "--tags", "foo:bar:baz" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const arr = result.getArray("tags").?;
+    try std.testing.expectEqual(@as(usize, 3), arr.len);
+    try std.testing.expectEqualStrings("foo", arr[0]);
+    try std.testing.expectEqualStrings("bar", arr[1]);
+    try std.testing.expectEqualStrings("baz", arr[2]);
+}
+
+test "Parser key-value option" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "env",
+                .long = "env",
+                .value_type = .key_value,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "--env", "FOO=bar" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const kv = result.getKeyValue("env").?;
+    try std.testing.expectEqualStrings("FOO", kv.key);
+    try std.testing.expectEqualStrings("bar", kv.value);
+}
+
+test "Parser counter option" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "verbose",
+                .long = "verbose",
+                .short = 'v',
+                .action = .count,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "-v", "-v", "-v" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqual(@as(u32, 3), result.getCounter("verbose").?);
+}
+
+test "Parser isPresent distinguishes user-provided from default" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "output", .long = "output", .default = "out.txt" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    {
+        const args = [_][]const u8{};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.isPresent("output"));
+        try std.testing.expectEqualStrings("out.txt", result.getString("output").?);
+    }
+
+    {
+        const args = [_][]const u8{ "--output", "custom.txt" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.isPresent("output"));
+        try std.testing.expectEqualStrings("custom.txt", result.getString("output").?);
+    }
+}
+
+test "Parser bool default value" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "flag", .long = "flag", .value_type = .bool, .default = "true" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+    try std.testing.expect(result.getBool("flag").?);
+}
+
+test "Parser positional arguments by position index" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "input", .positional = true, .required = true },
+            .{ .name = "output", .positional = true },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "input.txt", "output.txt" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqualStrings("input.txt", result.getString("input").?);
+    try std.testing.expectEqualStrings("output.txt", result.getString("output").?);
+    // Both args should be present in the result
+    try std.testing.expect(result.contains("input"));
+    try std.testing.expect(result.contains("output"));
+}
+
+test "Parser negated flags" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .allow_negated_flags = true });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "color", .long = "color", .action = .store_true },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{"--no-color"};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+    try std.testing.expect(!result.getBool("color").?);
+}
+
+test "Parser mutual exclusion" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "json", .long = "json", .action = .store_true },
+            .{ .name = "yaml", .long = "yaml", .action = .store_true },
+        },
+        .mutual_exclusions = &[_][]const []const u8{
+            &[_][]const u8{ "json", "yaml" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    {
+        const args = [_][]const u8{ "--json", "--yaml" };
+        try std.testing.expectError(errors.ParseError.MutuallyExclusive, parser.parse(&args));
+    }
+
+    {
+        const args = [_][]const u8{"--json"};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expect(result.getBool("json").?);
+    }
+}
+
+test "Parser subcommand with arguments" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{},
+        .subcommands = &[_]schema_mod.SubcommandSpec{
+            .{
+                .name = "build",
+                .args = &[_]ArgSpec{
+                    .{ .name = "target", .long = "target", .default = "debug" },
+                },
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "build", "--target", "release" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expect(result.hasSubcommand());
+    try std.testing.expectEqualStrings("build", result.subcommand.?);
+}
+
+test "Parser getEnum from string" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const Mode = enum { fast, slow, medium };
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{ .name = "mode", .long = "mode", .value_type = .string, .default = "fast" },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "--mode", "slow" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const mode = result.getEnum(Mode, "mode").?;
+    try std.testing.expectEqual(Mode.slow, mode);
+}
+
+test "Parser variadic nargs one_or_more" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "files",
+                .long = "files",
+                .nargs = .one_or_more,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "--files", "a.txt", "b.txt", "c.txt" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const arr = result.getArray("files").?;
+    try std.testing.expectEqual(@as(usize, 3), arr.len);
+    try std.testing.expectEqualStrings("a.txt", arr[0]);
+}
+
+test "Parser env_var with default value" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    // When env_var is set but not in environment, default should be used
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "db-host",
+                .long = "db-host",
+                .env_var = "NONEXISTENT_VAR_FOR_TEST",
+                .default = "localhost",
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    // Without providing arg, default should be used (env var doesn't exist)
+    {
+        const args = [_][]const u8{};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("localhost", result.getString("db-host").?);
+    }
+
+    // With explicit arg, it should override default
+    {
+        const args = [_][]const u8{ "--db-host", "explicit" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("explicit", result.getString("db-host").?);
+    }
+}
+
+test "Parser callback on flag" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const Ctx = struct {
+        var called: bool = false;
+        fn onVerbose(name: []const u8, value: ?[]const u8) void {
+            _ = name;
+            _ = value;
+            called = true;
+        }
+    };
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "verbose",
+                .long = "verbose",
+                .action = .callback_flag,
+                .callback = Ctx.onVerbose,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{"--verbose"};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expect(Ctx.called);
+}
+
+test "Parser hex decode option" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "data",
+                .long = "data",
+                .value_type = .string,
+                .decode_mode = .hex,
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    const args = [_][]const u8{ "--data", "48656c6c6f" };
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    const decoded = result.getString("data").?;
+    try std.testing.expectEqualStrings("Hello", decoded);
+}
+
+test "Parser env_var with validator passes for valid value" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("TEST_VALID_PORT", "8080");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "port",
+                .long = "port",
+                .value_type = .int,
+                .env_var = "TEST_VALID_PORT",
+                .default = "3000",
+                .validator = @ptrCast(&struct {
+                    fn validate(_: std.Io, value: []const u8) validation.ValidationResult {
+                        const port = std.fmt.parseInt(u16, value, 10) catch return .{ .err = "invalid port" };
+                        if (port < 1 or port > 65535) return .{ .err = "port out of range" };
+                        return .ok;
+                    }
+                }.validate),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), &env_map);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqual(@as(i64, 8080), result.getInt("port").?);
+}
+
+test "Parser env_var with validator fails for invalid value" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("TEST_BAD_PORT", "99999");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "port",
+                .long = "port",
+                .value_type = .int,
+                .env_var = "TEST_BAD_PORT",
+                .default = "3000",
+                .validator = @ptrCast(&struct {
+                    fn validate(_: std.Io, value: []const u8) validation.ValidationResult {
+                        const port = std.fmt.parseInt(u16, value, 10) catch return .{ .err = "invalid port" };
+                        if (port < 1 or port > 65535) return .{ .err = "port out of range" };
+                        return .ok;
+                    }
+                }.validate),
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), &env_map);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    const err = parser.parse(&args);
+    try std.testing.expectError(errors.ValidationError.CustomValidationFailed, err);
+}
+
+test "Parser env_var CLI arg takes precedence over env var" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("TEST_HOST_PRECEDENCE", "env-host");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "host",
+                .long = "host",
+                .env_var = "TEST_HOST_PRECEDENCE",
+                .default = "default-host",
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), &env_map);
+    defer parser.deinit();
+
+    // CLI arg should win over env var
+    {
+        const args = [_][]const u8{ "--host", "cli-host" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("cli-host", result.getString("host").?);
+    }
+
+    // Env var should win over default
+    {
+        const args = [_][]const u8{};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("env-host", result.getString("host").?);
+    }
+}
+
+test "Parser env_prefix derivation" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("MYAPP_DB_HOST", "env-db-host");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "db-host",
+                .long = "db-host",
+                .default = "localhost",
+            },
+        },
+    };
+
+    var cfg = config_mod.Config{};
+    cfg.env_prefix = "MYAPP";
+
+    var parser = try Parser.initWithConfig(allocator, spec, defaultIo(), &env_map, cfg);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqualStrings("env-db-host", result.getString("db-host").?);
+}
+
+test "Parser addEnvOption auto-derivation" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("DB_HOST", "derived-host");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "db-host",
+                .long = "db-host",
+                .env_var = "DB_HOST",
+                .default = "localhost",
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), &env_map);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expectEqualStrings("derived-host", result.getString("db-host").?);
+}
+
+test "Parser env_var with bool flag" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false });
+    defer config_mod.resetConfig();
+
+    var env_map: std.process.Environ.Map = .init(allocator);
+    defer env_map.deinit();
+    try env_map.put("TEST_VERBOSE", "true");
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "verbose",
+                .long = "verbose",
+                .value_type = .bool,
+                .env_var = "TEST_VERBOSE",
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), &env_map);
+    defer parser.deinit();
+
+    const args = [_][]const u8{};
+    var result = try parser.parse(&args);
+    defer result.deinit();
+
+    try std.testing.expect(result.getBool("verbose") orelse false);
 }

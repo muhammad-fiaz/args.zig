@@ -283,6 +283,7 @@ pub const ParseResult = struct {
     positionals: std.ArrayList([]const u8),
     remaining: std.ArrayList([]const u8),
     owned_slices: std.ArrayList([]const u8),
+    owned_arrays: std.ArrayList([][]const u8),
     subcommand: ?[]const u8,
     subcommand_args: ?*ParseResult,
     allocator: std.mem.Allocator,
@@ -293,6 +294,7 @@ pub const ParseResult = struct {
             .positionals = .empty,
             .remaining = .empty,
             .owned_slices = .empty,
+            .owned_arrays = .empty,
             .subcommand = null,
             .subcommand_args = null,
             .allocator = allocator,
@@ -304,6 +306,11 @@ pub const ParseResult = struct {
             self.allocator.free(slice);
         }
         self.owned_slices.deinit(self.allocator);
+
+        for (self.owned_arrays.items) |arr| {
+            self.allocator.free(arr);
+        }
+        self.owned_arrays.deinit(self.allocator);
 
         self.values.deinit();
         self.positionals.deinit(self.allocator);
@@ -318,6 +325,11 @@ pub const ParseResult = struct {
     /// Registers a slice as owned by this parse result.
     pub fn ownSlice(self: *ParseResult, slice: []const u8) !void {
         try self.owned_slices.append(self.allocator, slice);
+    }
+
+    /// Registers an array buffer as owned by this parse result.
+    pub fn ownArray(self: *ParseResult, arr: [][]const u8) !void {
+        try self.owned_arrays.append(self.allocator, arr);
     }
 
     /// Inserts or replaces a parsed value.
@@ -378,8 +390,8 @@ pub const ParseResult = struct {
     /// Get an enum value by name, converting the string value to the given enum type.
     pub fn getEnum(self: *const ParseResult, comptime T: type, name: []const u8) ?T {
         const str = self.getString(name) orelse return null;
-        inline for (@typeInfo(T).@"enum".fields) |field| {
-            if (utils.eql(str, field.name)) return @field(T, field.name);
+        inline for (@typeInfo(T).@"enum".field_names) |ef_name| {
+            if (utils.eql(str, ef_name)) return @field(T, ef_name);
         }
         return null;
     }

@@ -16,7 +16,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-2025-vs2026, macos-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -30,7 +30,7 @@ jobs:
     outputs:
       bench_output: ${{ steps.run_bench.outputs.bench_output }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -101,7 +101,7 @@ jobs:
     needs: [test, bench]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Get Release URL
         id: get_url

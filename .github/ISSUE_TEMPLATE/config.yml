@@ -6,3 +6,6 @@ contact_links:
   - name: Security Vulnerabilities
     url: https://github.com/muhammad-fiaz/args.zig/security/policy
     about: Please report security vulnerabilities to our private disclosure program.
+  - name: Documentations
+    url: https://muhammad-fiaz.github.io/args.zig/
+    about: Please refer to the documentation for usage and examples.  

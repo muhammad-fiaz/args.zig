@@ -849,9 +849,7 @@ pub const Validators = struct {
         return anyOf(validator_list);
     }
 
-    // ──────────────────────────────────────────────────────────────────
     // New validators added in v0.0.6
-    // ──────────────────────────────────────────────────────────────────
 
     /// Alias for `nonEmpty` — value must not be an empty string.
     pub const notEmpty = nonEmpty;
@@ -946,9 +944,7 @@ pub const Validators = struct {
     }
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
 // Duration and byte-size parsing (standalone helpers used by Validators above)
-// ──────────────────────────────────────────────────────────────────────────────
 
 /// Parse a duration string into total seconds.
 /// Supported units: d (days), h (hours), m (minutes), s (seconds).

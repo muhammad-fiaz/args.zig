@@ -165,10 +165,9 @@ pub inline fn parseFloat(s: []const u8) ?f64 {
     return std.fmt.parseFloat(f64, s) catch null;
 }
 
-/// Create an ArrayList writer for building strings.
-pub inline fn stringWriter(allocator: std.mem.Allocator) std.ArrayList(u8).Writer {
-    var list: std.ArrayList(u8) = .empty;
-    return list.writer(allocator);
+/// Create a writer that appends to an allocated buffer.
+pub inline fn stringWriter(allocator: std.mem.Allocator) std.Io.Writer.Allocating {
+    return .init(allocator);
 }
 
 /// Calculate padding for alignment.
@@ -301,18 +300,18 @@ pub inline fn contains(haystack: []const u8, needle: []const u8) bool {
 /// Wrap text to specified width.
 /// Returns a list of lines allocated with the allocator.
 pub fn wrapText(allocator: std.mem.Allocator, text: []const u8, max_width: usize, initial_indent: usize, subsequent_indent: usize) !std.ArrayList([]const u8) {
-    var lines = std.ArrayList([]const u8).init(allocator);
+    var lines: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (lines.items) |line| allocator.free(line);
-        lines.deinit();
+        lines.deinit(allocator);
     }
 
     var iter = std.mem.splitScalar(u8, text, ' ');
-    var current_line = std.ArrayList(u8).init(allocator);
-    defer current_line.deinit();
+    var current_line: std.ArrayList(u8) = .empty;
+    defer current_line.deinit(allocator);
 
     // Add initial indentation
-    try current_line.appendNTimes(' ', initial_indent);
+    try current_line.appendNTimes(allocator, ' ', initial_indent);
 
     var first_word = true;
     var current_width = initial_indent;
@@ -321,28 +320,28 @@ pub fn wrapText(allocator: std.mem.Allocator, text: []const u8, max_width: usize
         if (word.len == 0) continue;
 
         if (first_word) {
-            try current_line.appendSlice(word);
+            try current_line.appendSlice(allocator, word);
             current_width += word.len;
             first_word = false;
         } else {
             if (current_width + 1 + word.len > max_width) {
                 // Push current line
-                try lines.append(try current_line.toOwnedSlice());
+                try lines.append(allocator, try current_line.toOwnedSlice(allocator));
 
                 // Start new line
-                try current_line.appendNTimes(' ', subsequent_indent);
-                try current_line.appendSlice(word);
+                try current_line.appendNTimes(allocator, ' ', subsequent_indent);
+                try current_line.appendSlice(allocator, word);
                 current_width = subsequent_indent + word.len;
             } else {
-                try current_line.append(' ');
-                try current_line.appendSlice(word);
+                try current_line.append(allocator, ' ');
+                try current_line.appendSlice(allocator, word);
                 current_width += 1 + word.len;
             }
         }
     }
 
     if (current_line.items.len > 0) {
-        try lines.append(try current_line.toOwnedSlice());
+        try lines.append(allocator, try current_line.toOwnedSlice(allocator));
     }
 
     return lines;

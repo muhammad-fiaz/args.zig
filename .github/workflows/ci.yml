@@ -5,6 +5,8 @@ env:
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -35,8 +37,8 @@ jobs:
       - name: Build library (ReleaseFast)
         run: zig build -Doptimize=ReleaseFast
 
-      - name: Run all examples (skipped here — run in matrix job)
-        run: echo "Examples are tested in a dedicated matrix job on Linux and macOS runners"
+      - name: Build all examples
+        run: zig build -Dbuild-examples=true
 
       - name: Run benchmarks
         run: zig build bench
@@ -55,7 +57,7 @@ jobs:
             target: x86_64-linux
           - os: macos-latest
             target: x86_64-macos
-            - os: windows-2025-vs2026
+          - os: windows-2025-vs2026
             target: x86_64-windows
     steps:
       - name: Checkout
@@ -74,7 +76,7 @@ jobs:
       - name: Run all examples on ${{ matrix.target }}
         run: |
           echo "Running examples for ${{ matrix.target }}"
-          zig build run-all-examples -Dtarget=${{ matrix.target }}
+          zig build -Dbuild-examples=true run-all-examples -Dtarget=${{ matrix.target }}
 
   examples-build-only:
     name: Build Library Matrix (build-only for many targets)
@@ -118,20 +120,4 @@ jobs:
         if: contains('x86_64-linux x86-linux aarch64-linux x86_64-macos aarch64-macos x86_64-windows x86-windows', matrix.target)
         run: |
           echo "Compiling all examples for ${{ matrix.target }}"
-          zig build example-basic -Dtarget=${{ matrix.target }}
-          zig build example-advanced -Dtarget=${{ matrix.target }}
-          zig build example-config_modes -Dtarget=${{ matrix.target }}
-          zig build example-negated_flags -Dtarget=${{ matrix.target }}
-          zig build example-positional_validation -Dtarget=${{ matrix.target }}
-          zig build example-select_all -Dtarget=${{ matrix.target }}
-          zig build example-question_flow -Dtarget=${{ matrix.target }}
-          zig build example-include_exclude -Dtarget=${{ matrix.target }}
-          zig build example-include_exclude_strict -Dtarget=${{ matrix.target }}
-          zig build example-file_support -Dtarget=${{ matrix.target }}
-          zig build example-data_input_validation -Dtarget=${{ matrix.target }}
-          zig build example-custom_parsing -Dtarget=${{ matrix.target }}
-          zig build example-callbacks -Dtarget=${{ matrix.target }}
-          zig build example-key_value -Dtarget=${{ matrix.target }}
-          zig build example-struct_demo -Dtarget=${{ matrix.target }}
-          zig build example-expect_validation -Dtarget=${{ matrix.target }}
-          zig build example-update_check -Dtarget=${{ matrix.target }}
+          zig build -Dbuild-examples=true -Dtarget=${{ matrix.target }}

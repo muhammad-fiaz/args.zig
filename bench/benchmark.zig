@@ -20,6 +20,8 @@ const BenchmarkResult = struct {
         "Workflow Helpers",
         "Validation",
         "Generation",
+        "Export",
+        "Additional",
     };
 };
 
@@ -36,11 +38,13 @@ fn printResults(results: []const BenchmarkResult) void {
     const section = theme.section;
     const accent = theme.accent;
 
+    const sep = "----------------------------------------------------------------------------------------------------";
+
     std.debug.print("\n", .{});
-    std.debug.print("{s}{s}{s}", .{ header, "-" ** 100, reset });
+    std.debug.print("{s}{s}{s}", .{ header, sep, reset });
     std.debug.print("\n", .{});
     std.debug.print("{s}                                 ARGS.ZIG BENCHMARK RESULTS{s}\n", .{ accent, reset });
-    std.debug.print("{s}{s}{s}", .{ header, "-" ** 100, reset });
+    std.debug.print("{s}{s}{s}", .{ header, sep, reset });
     std.debug.print("\n", .{});
 
     for (BenchmarkResult.categories) |cat| {
@@ -54,10 +58,10 @@ fn printResults(results: []const BenchmarkResult) void {
         if (!has_category) continue;
 
         std.debug.print("\n{s}[{s}]{s}\n", .{ section, cat, reset });
-        std.debug.print("{s}{s}{s}", .{ header, "-" ** 100, reset });
+        std.debug.print("{s}{s}{s}", .{ header, sep, reset });
         std.debug.print("\n", .{});
         std.debug.print("{s}{s:<40} {s:>25} {s:>25}{s}\n", .{ accent, "Benchmark", "Ops/sec", "Avg Latency (ns)", reset });
-        std.debug.print("{s}{s}{s}", .{ header, "-" ** 100, reset });
+        std.debug.print("{s}{s}{s}", .{ header, sep, reset });
         std.debug.print("\n", .{});
 
         for (results) |r| {
@@ -71,8 +75,10 @@ fn printResults(results: []const BenchmarkResult) void {
         }
     }
 
+    const sep_long = "------------------------------------------------------------------------------------------------------------------------------------";
+
     std.debug.print("\n", .{});
-    std.debug.print("{s}{s}{s}", .{ header, "-" ** 130, reset });
+    std.debug.print("{s}{s}{s}", .{ header, sep_long, reset });
     std.debug.print("\n", .{});
 }
 
@@ -465,6 +471,179 @@ fn benchmarkSubcommandSuggestionLookup(allocator: std.mem.Allocator) !void {
     _ = sug;
 }
 
+fn benchmarkExportArgs(allocator: std.mem.Allocator) !void {
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v' });
+    try parser.addOption("output", .{ .short = 'o' });
+    try parser.addOption("port", .{ .short = 'p', .value_type = .int });
+    try parser.addPositional("input", .{});
+    try parser.addSubcommand(.{ .name = "serve", .help = "Start server" });
+
+    _ = parser.getAllArgs();
+    _ = parser.getAllSubcommands();
+    _ = parser.getAllGroups();
+    _ = parser.exportSpec();
+    _ = parser.getArgSpec("port");
+    _ = parser.totalArgCount();
+    _ = parser.totalSubcommandCount();
+    _ = parser.totalGroupCount();
+}
+
+fn benchmarkBracketedListParsing(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--tags", "{rust,zig,go}" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addBracketedListOption("tags", .{});
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkDurationParsing(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--timeout", "1h30m" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addDurationOption("timeout", .{ .short = 't' });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkSizeParsing(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--size", "1GB" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addSizeOption("size", .{});
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkParseOrFallback(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--unknown-flag" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v' });
+
+    var result = parser.parseOr(&test_args, null);
+    result.deinit();
+}
+
+fn benchmarkMutualExclusion(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--json" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addFlag("json", .{});
+    try parser.addFlag("text", .{});
+    try parser.addFlag("csv", .{});
+    try parser.addMutualExclusion(&[_][]const u8{ "json", "text", "csv" });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkRequiresRelation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--host", "localhost", "--port", "8080" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addOption("host", .{});
+    try parser.addOption("port", .{ .short = 'p' });
+    try parser.addRequires("port", "host");
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkRequiredIfRelation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--ssl", "--cert-file", "cert.pem" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addFlag("ssl", .{});
+    try parser.addOption("cert-file", .{});
+    try parser.addRequiredIf("cert-file", "ssl", null);
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkCaseInsensitiveParsing(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--VERBOSE" };
+    var parser = try args.ArgumentParser.init(allocator, .{
+        .name = "bench",
+        .config = .{
+            .check_for_updates = false,
+            .show_update_notification = false,
+            .use_colors = false,
+            .show_defaults = false,
+            .show_env_vars = false,
+            .exit_on_error = false,
+            .silent_errors = true,
+            .case_sensitive = false,
+        },
+    });
+    defer parser.deinit();
+
+    try parser.addFlag("verbose", .{ .short = 'v' });
+    try parser.addOption("output", .{ .short = 'o' });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkSecretOption(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--api-key", "sk-1234567890abcdef" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addSecretOption("api-key", .{});
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkEnvOption(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--database-url", "postgres://localhost/db" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addEnvOption("database-url", .{});
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkRangeValidation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--port", "8080", "--ratio", "0.75" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addRangeOption("port", u16, .{ .short = 'p', .min = 1, .max = 65535 });
+    try parser.addRangeOption("ratio", f64, .{ .min = 0.0, .max = 1.0 });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkCharRangeValidation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--username", "alice" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addCharRangeOption("username", .{ .min = 3, .max = 32 });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkFormatValidation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--output-format", "json" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addFormatOption("output-format", .{
+        .formats = &[_][]const u8{ "json", "yaml", "toml", "csv" },
+    });
+    try parseAndCleanup(&parser, &test_args);
+}
+
+fn benchmarkExtensionValidation(allocator: std.mem.Allocator) !void {
+    const test_args = [_][]const u8{ "--input", "config.yaml" };
+    var parser = try initBenchParser(allocator, "bench");
+    defer parser.deinit();
+
+    try parser.addExtensionOption("input", .{
+        .extensions = &[_][]const u8{ ".json", ".yaml", ".toml" },
+    });
+    try parseAndCleanup(&parser, &test_args);
+}
+
 pub fn main(init: std.process.Init) !void {
     bench_io = init.io;
     const allocator = init.gpa;
@@ -508,6 +687,25 @@ pub fn main(init: std.process.Init) !void {
     try results.append(allocator, try runBenchmark("Help Text Generation", allocator, bench_io, benchmarkHelpGeneration, "Generation"));
     try results.append(allocator, try runBenchmark("Shell Completion Generation (Bash)", allocator, bench_io, benchmarkCompletionGeneration, "Generation"));
     try results.append(allocator, try runBenchmark("Shell Completion Generation (Zsh)", allocator, bench_io, benchmarkCompletionGenerationZsh, "Generation"));
+
+    // Export
+    try results.append(allocator, try runBenchmark("Export / Introspection API", allocator, bench_io, benchmarkExportArgs, "Export"));
+
+    // Additional
+    try results.append(allocator, try runBenchmark("Bracketed List Parsing ({a,b,c})", allocator, bench_io, benchmarkBracketedListParsing, "Additional"));
+    try results.append(allocator, try runBenchmark("Duration Parsing (1h30m)", allocator, bench_io, benchmarkDurationParsing, "Additional"));
+    try results.append(allocator, try runBenchmark("Size Parsing (1GB)", allocator, bench_io, benchmarkSizeParsing, "Additional"));
+    try results.append(allocator, try runBenchmark("ParseOr Fallback (invalid args)", allocator, bench_io, benchmarkParseOrFallback, "Additional"));
+    try results.append(allocator, try runBenchmark("Mutual Exclusion", allocator, bench_io, benchmarkMutualExclusion, "Additional"));
+    try results.append(allocator, try runBenchmark("Requires Relation", allocator, bench_io, benchmarkRequiresRelation, "Additional"));
+    try results.append(allocator, try runBenchmark("Required-If Relation", allocator, bench_io, benchmarkRequiredIfRelation, "Additional"));
+    try results.append(allocator, try runBenchmark("Case-Insensitive Parsing", allocator, bench_io, benchmarkCaseInsensitiveParsing, "Additional"));
+    try results.append(allocator, try runBenchmark("Secret Option", allocator, bench_io, benchmarkSecretOption, "Additional"));
+    try results.append(allocator, try runBenchmark("Env Option", allocator, bench_io, benchmarkEnvOption, "Additional"));
+    try results.append(allocator, try runBenchmark("Range Validation (int + float)", allocator, bench_io, benchmarkRangeValidation, "Additional"));
+    try results.append(allocator, try runBenchmark("Char-Range Validation", allocator, bench_io, benchmarkCharRangeValidation, "Additional"));
+    try results.append(allocator, try runBenchmark("Format Validation", allocator, bench_io, benchmarkFormatValidation, "Additional"));
+    try results.append(allocator, try runBenchmark("Extension Validation", allocator, bench_io, benchmarkExtensionValidation, "Additional"));
 
     // Print all results to console
     printResults(results.items);
