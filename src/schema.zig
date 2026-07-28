@@ -88,20 +88,32 @@ pub fn deriveOptions(comptime T: type) []const ArgSpec {
         const is_optional = @typeInfo(FieldType) == .optional;
 
         // Detect if the struct field has a default value.
-        // Zig 0.16: info.fields[i].default_value (?*const anyopaque)
-        // Zig 0.17: info.field_attrs[i].default_value_ptr (?*const anyopaque)
-        const default_value_ptr: ?*const anyopaque = if (@hasField(@TypeOf(info), "fields"))
-            info.fields[i].default_value
-        else
+        // Zig 0.16: info.fields[i] has .default_value_ptr or .default_value
+        // Zig 0.17: info.field_attrs[i].default_value_ptr
+        const has_fields = @hasField(@TypeOf(info), "fields");
+        const default_value_ptr: ?*const anyopaque = if (has_fields) blk: {
+            const field = info.fields[i];
+            const FT = @TypeOf(field);
+            if (@hasField(FT, "default_value_ptr"))
+                break :blk field.default_value_ptr
+            else
+                break :blk field.default_value;
+        } else
             info.field_attrs[i].default_value_ptr;
         const has_default = default_value_ptr != null;
 
         // For non-optional fields that have a struct-level default, convert
         // the default to a string so the parser applies it automatically.
         const default_str: ?[]const u8 = if (!has_default or is_optional) null else blk: {
-            const typed_val: FieldType = if (@hasField(@TypeOf(info), "fields"))
-                @as(*const FieldType, @ptrCast(@alignCast(default_value_ptr.?))).*
-            else
+            const typed_val: FieldType = if (has_fields) blk2: {
+                const field = info.fields[i];
+                const FT = @TypeOf(field);
+                const ptr: *const anyopaque = if (@hasField(FT, "default_value_ptr"))
+                    field.default_value_ptr.?
+                else
+                    field.default_value.?;
+                break :blk2 @as(*const FieldType, @ptrCast(@alignCast(ptr))).*;
+            } else
                 info.field_attrs[i].defaultValue(FieldType) orelse unreachable;
 
             break :blk switch (FieldType) {
