@@ -17,6 +17,7 @@ pub fn main(init: std.process.Init) !void {
         .config = .{
             .exit_on_error = false,
             .check_for_updates = false,
+            .silent_errors = true,
             .suggest_closest = true,
             .suggestion_max_distance = 3,
             .unknown_subcommand_hint = "Use one of: init, clone, commit",

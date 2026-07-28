@@ -463,6 +463,8 @@ The parser includes one-call helpers for common input formats:
 - `addIsoDateTimeOption`
 - `addYearOption`
 - `addTimeOption`
+- `addUnixTimestampOption`
+- `addDateFlexibleOption`
 - `addJsonOption`
 - `addAbsolutePathOption`
 
@@ -1391,6 +1393,58 @@ Creates a minimal parser (no colors, no update check).
 ```zig
 var parser = try args.createMinimalParser(allocator, "myapp");
 defer parser.deinit();
+```
+
+### `quickParse`
+
+```zig
+pub fn quickParse(comptime T: type, options: ArgumentParser.InitOptions, init: std.process.Init) !ParseIntoResult(T)
+```
+
+One-shot parse using the global allocator. Convenience for simple CLIs where you don't need to manage allocator lifetime.
+
+**Example:**
+```zig
+const Config = struct { verbose: bool, output: ?[]const u8 };
+var result = try args.quickParse(Config, .{ .name = "myapp" }, init);
+defer result.deinit();
+```
+
+### `resetConfig`
+
+```zig
+pub fn resetConfig() void
+```
+
+Resets global configuration back to default values. Useful in tests to avoid state leakage between test cases.
+
+**Example:**
+```zig
+args.initConfig(.{ .use_colors = false });
+defer args.resetConfig(); // Restore defaults after test
+```
+
+### `enableUpdateCheck`
+
+```zig
+pub fn enableUpdateCheck() void
+```
+
+Re-enables the update checker after it has been disabled. The update checker is enabled by default.
+
+### `getLibraryVersion`
+
+```zig
+pub fn getLibraryVersion() []const u8
+```
+
+Returns the library version string. Also available via the `version` alias.
+
+**Example:**
+```zig
+std.debug.print("args.zig version: {s}\n", .{args.getLibraryVersion()});
+// or
+std.debug.print("args.zig version: {s}\n", .{args.version()});
 ```
 
 ### `deriveOptions`

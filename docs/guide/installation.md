@@ -19,13 +19,21 @@ head:
 
 ### Release Installation (Recommended)
 
-To install the latest stable release for zig v0.16+ (v0.0.8), verify the hash and add it to your `build.zig.zon` by running:
+Install the stable release matching your Zig version:
+
+**Zig 0.17+ (v0.0.8):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz
 ```
 
-Install the supported release for zig v0.15 (v0.0.4):
+**Zig 0.16 (v0.0.7):**
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
+```
+
+**Zig 0.15 (v0.0.4):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz

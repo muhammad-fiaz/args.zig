@@ -9,6 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "key-value-demo",
         .description = "Demonstrates parsing key=value arguments",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -23,7 +24,13 @@ pub fn main(init: std.process.Init) !void {
 
     var result: args.ParseResult = undefined;
     if (raw_args.len > 1) {
-        result = try parser.parseProcess(init);
+        result = parser.parseProcess(init) catch |err| {
+            if (err == args.ParseError.MissingRequired) {
+                try parser.printHelp();
+                return;
+            }
+            return err;
+        };
     } else {
         std.debug.print("No args provided. Simulating: -c db=postgres\n\n", .{});
         result = try parser.parse(&[_][]const u8{ "-c", "db=postgres" });

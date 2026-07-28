@@ -45,7 +45,8 @@ The library inspects your struct fields at compile-time and generates the corres
     - `i32`, `i64` → Integer Option
     - `f32`, `f64` → Float Option
     - `?T` → Optional (not required)
-    - `T` (non-bool) → Required Option
+    - `T` (non-bool, no default) → Required Option
+    - `T = value` (has default) → Optional with default value applied automatically
 
 ## Supported Field Types
 
@@ -54,11 +55,18 @@ The library inspects your struct fields at compile-time and generates the corres
 | `bool` | Flag, defaults to `false` | `--verbose` |
 | `?bool` | Optional flag | `--debug` |
 | `[]const u8` | Required string | `--name value` |
+| `[]const u8 = "default"` | Optional string with default | `--host localhost` |
 | `?[]const u8` | Optional string | `--output file.txt` |
 | `i32`, `i64` | Required integer | `--count 42` |
+| `i32 = 10` | Optional integer with default | `--port 8080` |
 | `?i32`, `?i64` | Optional integer | `--port 8080` |
+| `u32`, `u64` | Required unsigned integer | `--port 8080` |
+| `u32 = 8080` | Optional unsigned integer with default | `--port 8080` |
 | `f32`, `f64` | Required float | `--rate 0.5` |
+| `f64 = 30.0` | Optional float with default | `--timeout 30.0` |
 | `?f64` | Optional float | `--timeout 30.5` |
+| `enum` | Required enum (choices derived) | `--log-level info` |
+| `enum = .info` | Optional enum with default | `--log-level info` |
 
 ## Basic Example
 
@@ -80,8 +88,13 @@ const Config = struct {
     timeout: ?f64,
     port: ?i32,
     
-    // Required options (non-optional)
+    // Required options (no default value)
     count: i32,
+
+    // Optional with defaults (not required, applied automatically)
+    host: []const u8 = "localhost",
+    level: u32 = 8080,
+    rate: f64 = 0.5,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -98,6 +111,9 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("Verbose: {}\n", .{cfg.verbose});
     std.debug.print("Dry Run: {}\n", .{cfg.dry_run});
     std.debug.print("Count: {d}\n", .{cfg.count});
+    std.debug.print("Host: {s}\n", .{cfg.host});
+    std.debug.print("Port: {d}\n", .{cfg.level});
+    std.debug.print("Rate: {d}\n", .{cfg.rate});
     
     if (cfg.output) |out| {
         std.debug.print("Output: {s}\n", .{out});
@@ -116,11 +132,17 @@ $ myapp --count 42 --verbose
 Verbose: true
 Dry Run: false
 Count: 42
+Host: localhost
+Port: 8080
+Rate: 0.5
 
-$ myapp --count 10 --output result.txt --dry-run --port 8080
+$ myapp --count 10 --output result.txt --dry-run --port 8080 --host example.com
 Verbose: false
 Dry Run: true
 Count: 10
+Host: example.com
+Port: 8080
+Rate: 0.5
 Output: result.txt
 Port: 8080
 ```
@@ -130,9 +152,9 @@ Port: 8080
 > [!WARNING]
 > The `parseInto` approach is designed for simple to moderately complex CLIs. For advanced use cases (multi-value options, choices, subcommands), combine with the `ArgumentParser` API.
 
-### Limitation 1: No Multi-Value Options
+### Limitation 1: No Multi-Value Options (Append/FIFO)
 
-Struct-based parsing doesn't support repeatable options (like `-I path1 -I path2`). For this, use the traditional API:
+Struct-based parsing doesn't support repeatable options (like `-I path1 -I path2`). For this, use the traditional API with `addAppend`, which stores values in FIFO order (first-in, first-out):
 
 ```zig
 // Instead of parseInto, use ArgumentParser directly:
@@ -144,9 +166,12 @@ try parser.addAppend("include", .{ .short = 'I', .help = "Include paths" });
 var result = try parser.parseProcess(init);
 defer result.deinit();
 
-// Access multiple values
+// Access multiple values in FIFO order
 const includes = result.getArray("include"); // Returns slice of values
+// -I foo -I bar -I baz → ["foo", "bar", "baz"]
 ```
+
+Or use the **hybrid approach** to combine struct fields with append options:
 
 ### Limitation 2: No Choices or Validation
 

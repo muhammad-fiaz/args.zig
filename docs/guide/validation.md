@@ -110,6 +110,8 @@ args.zig also provides reusable validators for common app and API inputs:
 - `Validators.isoDateTime` / `Validators.dateTime`
 - `Validators.year`
 - `Validators.time`
+- `Validators.unixTimestamp` — validates Unix epoch timestamps (seconds up to year 2100)
+- `Validators.dateFlexible` — accepts `YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY`, `YYYY/MM/DD`
 - `Validators.json`
 - `Validators.absolutePath`
 - `Validators.intRange(min, max)`
@@ -153,6 +155,8 @@ try parser.addIsoDateOption("run-date", .{});
 try parser.addIsoDateTimeOption("timestamp", .{});
 try parser.addYearOption("year", .{});
 try parser.addTimeOption("time", .{});
+try parser.addUnixTimestampOption("created", .{});
+try parser.addDateFlexibleOption("deadline", .{});
 try parser.addAbsolutePathOption("workspace", .{});
 try parser.addJsonOption("payload", .{});
 ```

@@ -14,6 +14,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "expect-demo",
         .description = "Demonstrates 'expect' validation (soft choices) vs 'choices'.",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -36,7 +37,13 @@ pub fn main(init: std.process.Init) !void {
     });
 
     // Parse command line arguments
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     const env = result.getString("env") orelse "default";

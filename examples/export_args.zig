@@ -13,6 +13,7 @@ pub fn main(init: std.process.Init) !void {
         .name = "export-example",
         .version = "1.0.0",
         .description = "Demonstrates the export / introspection API",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 

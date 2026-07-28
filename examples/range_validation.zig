@@ -9,6 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "range-example",
         .description = "Demonstrates range and character-length validation",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -48,7 +49,13 @@ pub fn main(init: std.process.Init) !void {
         .max = 65535,
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     const level = result.getInt("level") orelse 50;

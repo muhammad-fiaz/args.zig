@@ -14,6 +14,7 @@ pub fn main(init: std.process.Init) !void {
         .version = "2.0.0",
         .description = "An advanced CLI demonstrating all args.zig features",
         .epilog = "Examples:\n  advanced-cli init myproject\n  advanced-cli build --release\n  advanced-cli deploy --env production",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -135,7 +136,13 @@ pub fn main(init: std.process.Init) !void {
     });
 
     // Parse arguments
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     // Get global options

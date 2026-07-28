@@ -11,6 +11,7 @@ pub fn main(init: std.process.Init) !void {
         .name = "numeric-demo",
         .version = "1.0.0",
         .description = "Demonstrates typed integer and float options",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -48,7 +49,13 @@ pub fn main(init: std.process.Init) !void {
         .default = "1.5",
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     std.debug.print("count       = {d} (type: int)\n", .{result.get("count").?.asInt().?});

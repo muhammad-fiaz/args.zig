@@ -20,6 +20,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "callback-demo",
         .description = "Demonstrates using callbacks for arguments",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -47,7 +48,13 @@ pub fn main(init: std.process.Init) !void {
 
     var result: args.ParseResult = undefined;
     if (raw_args.len > 1) {
-        result = try parser.parseProcess(init);
+        result = parser.parseProcess(init) catch |err| {
+            if (err == args.ParseError.MissingRequired) {
+                try parser.printHelp();
+                return;
+            }
+            return err;
+        };
     } else {
         std.debug.print("No args provided. Simulating: --output results.txt --loud\n\n", .{});
         result = try parser.parse(&[_][]const u8{ "--output", "results.txt", "--loud" });

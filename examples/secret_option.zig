@@ -10,6 +10,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "secret-example",
         .description = "Demonstrates secret/hidden options",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -32,7 +33,13 @@ pub fn main(init: std.process.Init) !void {
         .env_var = "MY_API_KEY",
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     const user = result.getString("user") orelse "unknown";

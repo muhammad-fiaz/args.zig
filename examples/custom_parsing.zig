@@ -48,6 +48,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "screen-tool",
         .description = "A tool to configure screen settings",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -70,7 +71,13 @@ pub fn main(init: std.process.Init) !void {
 
     var result: args.ParseResult = undefined;
     if (raw_args.len > 1) {
-        result = try parser.parseProcess(init);
+        result = parser.parseProcess(init) catch |err| {
+            if (err == args.ParseError.MissingRequired) {
+                try parser.printHelp();
+                return;
+            }
+            return err;
+        };
     } else {
         // Simulation for the example
         const sim_args = [_][]const u8{ "--mode", "2560x1440@144Hz", "--output", "DP-1" };

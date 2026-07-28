@@ -14,6 +14,7 @@ pub fn main(init: std.process.Init) !void {
         .version = "1.0.0",
         .description = "A basic example demonstrating args.zig features",
         .epilog = "For more information, visit https://github.com/muhammad-fiaz/args.zig",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -76,7 +77,7 @@ pub fn main(init: std.process.Init) !void {
     var result = parser.parseProcess(init) catch |err| {
         if (err == args.ParseError.MissingRequired) {
             try parser.printHelp();
-            return;
+            std.process.exit(0);
         }
         return err;
     };

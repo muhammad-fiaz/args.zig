@@ -1346,7 +1346,7 @@ test "Parser default values" {
 
 test "Parser duplicate singleton option returns DuplicateArgument" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -1544,7 +1544,7 @@ test "Parser argument groups exclusive" {
 
 test "Parser custom validator" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const Validator = struct {
@@ -1849,7 +1849,7 @@ test "Parser case-insensitive choices when case_sensitive false" {
 
 test "Parser validates positional choices" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -1932,7 +1932,7 @@ test "Parser array value with separator via inline" {
 
 test "Parser default value validation rejects out-of-range default" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -2008,7 +2008,7 @@ test "Parser default value validation no validator passes" {
 
 test "Parser float range validation" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -2042,7 +2042,7 @@ test "Parser float range validation" {
 
 test "Parser char range validation" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -2339,7 +2339,7 @@ test "Parser negated flags" {
 
 test "Parser mutual exclusion" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     const spec = CommandSpec{
@@ -2602,7 +2602,7 @@ test "Parser env_var with validator passes for valid value" {
 
 test "Parser env_var with validator fails for invalid value" {
     const allocator = std.testing.allocator;
-    config_mod.initConfig(.{ .exit_on_error = false });
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
     defer config_mod.resetConfig();
 
     var env_map: std.process.Environ.Map = .init(allocator);
@@ -2776,4 +2776,130 @@ test "Parser env_var with bool flag" {
     defer result.deinit();
 
     try std.testing.expect(result.getBool("verbose") orelse false);
+}
+
+test "Parser default validated against choices" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
+    defer config_mod.resetConfig();
+
+    // Valid default should pass
+    {
+        const spec = CommandSpec{
+            .name = "test",
+            .add_help = false,
+            .args = &[_]ArgSpec{
+                .{
+                    .name = "format",
+                    .long = "format",
+                    .default = "json",
+                    .choices = &[_][]const u8{ "json", "yaml", "toml" },
+                },
+            },
+        };
+        var parser = try Parser.init(allocator, spec, defaultIo(), null);
+        defer parser.deinit();
+
+        const args = [_][]const u8{};
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("json", result.getString("format").?);
+    }
+
+    // Invalid default should fail
+    {
+        const spec = CommandSpec{
+            .name = "test",
+            .add_help = false,
+            .args = &[_]ArgSpec{
+                .{
+                    .name = "format",
+                    .long = "format",
+                    .default = "BAD_DEFAULT",
+                    .choices = &[_][]const u8{ "json", "yaml", "toml" },
+                },
+            },
+        };
+        var parser = try Parser.init(allocator, spec, defaultIo(), null);
+        defer parser.deinit();
+
+        const args = [_][]const u8{};
+        const err = parser.parse(&args);
+        try std.testing.expectError(errors.ValidationError.CustomValidationFailed, err);
+    }
+}
+
+test "Parser format option validates CLI arg against choices" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "format",
+                .long = "format",
+                .short = 'f',
+                .default = "json",
+                .choices = &[_][]const u8{ "json", "yaml", "toml", "csv" },
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    // Valid choice
+    {
+        const args = [_][]const u8{ "--format", "yaml" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings("yaml", result.getString("format").?);
+    }
+
+    // Invalid choice
+    {
+        const args = [_][]const u8{ "--format", "xml" };
+        const err = parser.parse(&args);
+        try std.testing.expectError(errors.ParseError.InvalidChoice, err);
+    }
+}
+
+test "Parser extension option validates CLI arg against choices" {
+    const allocator = std.testing.allocator;
+    config_mod.initConfig(.{ .exit_on_error = false, .silent_errors = true });
+    defer config_mod.resetConfig();
+
+    const spec = CommandSpec{
+        .name = "test",
+        .add_help = false,
+        .args = &[_]ArgSpec{
+            .{
+                .name = "ext",
+                .long = "ext",
+                .default = ".json",
+                .choices = &[_][]const u8{ ".json", ".yaml", ".toml", ".csv" },
+            },
+        },
+    };
+
+    var parser = try Parser.init(allocator, spec, defaultIo(), null);
+    defer parser.deinit();
+
+    // Valid choice
+    {
+        const args = [_][]const u8{ "--ext", ".yaml" };
+        var result = try parser.parse(&args);
+        defer result.deinit();
+        try std.testing.expectEqualStrings(".yaml", result.getString("ext").?);
+    }
+
+    // Invalid choice
+    {
+        const args = [_][]const u8{ "--ext", ".xml" };
+        const err = parser.parse(&args);
+        try std.testing.expectError(errors.ParseError.InvalidChoice, err);
+    }
 }

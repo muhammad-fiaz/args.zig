@@ -5,6 +5,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(init.arena.allocator(), .{
         .name = "validation-demo",
         .description = "Demonstrates built-in validators",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -38,7 +39,13 @@ pub fn main(init: std.process.Init) !void {
         .validator = args.Validators.uppercase,
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     if (result.getString("color")) |c| std.debug.print("Color: {s}\n", .{c});

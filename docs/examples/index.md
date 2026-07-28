@@ -338,6 +338,7 @@ zig build run-file_support
 - `addUuidOption`
 - `addIsoDateOption` and `addIsoDateTimeOption`
 - `addYearOption` and `addTimeOption`
+- `addUnixTimestampOption` and `addDateFlexibleOption`
 - `addAbsolutePathOption`
 - `addJsonOption`
 - Numeric range validation via `Validators.intRange(...)`
@@ -542,7 +543,7 @@ expect-demo -e unknown
 
 ## Declarative Structs Example
 
-Parsing arguments directly into a Zig struct:
+Parsing arguments directly into a Zig struct. Fields with default values are automatically optional:
 
 ```zig
 const std = @import("std");
@@ -553,6 +554,8 @@ const Config = struct {
     dry_run: bool,
     output: ?[]const u8,
     count: i32,
+    host: []const u8 = "localhost",
+    port: u32 = 8080,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -567,12 +570,15 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("Verbose: {}\n", .{cfg.verbose});
     std.debug.print("Count:   {d}\n", .{cfg.count});
+    std.debug.print("Host:    {s}\n", .{cfg.host});
+    std.debug.print("Port:    {d}\n", .{cfg.port});
 }
 ```
 
 **Usage:**
 ```bash
-struct-demo --count 10 --verbose
+struct-demo --count 10 --verbose              # host=localhost, port=8080 (defaults)
+struct-demo --count 5 --host example.com      # port=8080 (default), verbose=false
 ```
 
 
@@ -907,6 +913,11 @@ pub fn main(init: std.process.Init) !void {
 
 **Usage:**
 ```bash
+# All defaults applied — no args needed:
+struct-demo
+# verbose=false, log-level=info, format=table, port=8080, timeout=30.0, host=localhost
+
+# Override specific options:
 struct-demo --verbose --log-level debug --format json --port 3000 --timeout 60.0 --host 0.0.0.0
 ```
 

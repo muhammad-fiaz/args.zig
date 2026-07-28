@@ -16,6 +16,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "accessors-example",
         .description = "Demonstrates all ParseResult accessor methods",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -27,7 +28,13 @@ pub fn main(init: std.process.Init) !void {
     try parser.addFlag("debug", .{ .short = 'd', .help = "Debug mode" });
     try parser.addOption("output", .{ .short = 'o', .help = "Output file" });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     std.debug.print("=== ParseResult Accessor Methods ===\n\n", .{});

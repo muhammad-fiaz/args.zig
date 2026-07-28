@@ -7,7 +7,10 @@ const args = @import("args");
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
-    var ap = try args.createParser(allocator, "conflict-demo");
+    var ap = try args.ArgumentParser.init(allocator, .{
+        .name = "conflict-demo",
+        .config = .{ .exit_on_error = false },
+    });
     defer ap.deinit();
 
     ap.description = "A demonstration of advanced argument validation and relations (conflicts/requires/exclusions)";
@@ -50,6 +53,9 @@ pub fn main(init: std.process.Init) !void {
     } else if (result.contains("postgres")) {
         std.debug.print("Backend: PostgreSQL\n", .{});
     }
-    std.debug.print("Server:  {s}:{s}\n", .{ result.get("host").?.asString().?, result.get("port").?.asString() orelse "default" });
-    std.debug.print("User:    {s}\n", .{result.get("user").?.asString().?});
+    const host = result.getString("host") orelse "localhost";
+    const port = result.getString("port") orelse "default";
+    const user = result.getString("user") orelse "(none)";
+    std.debug.print("Server:  {s}:{s}\n", .{ host, port });
+    std.debug.print("User:    {s}\n", .{user});
 }

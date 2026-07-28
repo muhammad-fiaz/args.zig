@@ -15,7 +15,13 @@ pub fn main(init: std.process.Init) !void {
         };
 
         // Uses Config.minimal() internally — no colors, no update check
-        var result = try args.quickParse(allocator, &specs, "quick-example", init);
+        var result = args.quickParse(allocator, &specs, "quick-example", init) catch |err| {
+            if (err == args.ParseError.MissingRequired) {
+                std.debug.print("Usage: quick-example --name <NAME> [--verbose]\n", .{});
+                return;
+            }
+            return err;
+        };
         defer result.deinit();
 
         const name = result.getString("name") orelse "World";

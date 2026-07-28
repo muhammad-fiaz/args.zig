@@ -7,7 +7,10 @@ const args = @import("args");
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
-    var ap = try args.createParser(allocator, "duration-size-demo");
+    var ap = try args.ArgumentParser.init(allocator, .{
+        .name = "duration-size-demo",
+        .config = .{ .exit_on_error = false },
+    });
     defer ap.deinit();
 
     ap.description = "Demonstration of typed duration, byte size, and generic range-validated options";

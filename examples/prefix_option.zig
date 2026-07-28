@@ -10,6 +10,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "prefix-example",
         .description = "Demonstrates prefix-matching options",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -27,7 +28,13 @@ pub fn main(init: std.process.Init) !void {
         .help = "Enable components matching --enable-<component> pattern",
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     const verbose = result.getBool("verbose") orelse false;

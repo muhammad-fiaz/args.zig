@@ -45,7 +45,13 @@ pub fn main(init: std.process.Init) !void {
         .help = "API key (from MYAPP_API_KEY env var)",
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     std.debug.print("Database configuration:\n", .{});

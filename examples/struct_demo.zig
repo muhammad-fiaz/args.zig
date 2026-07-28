@@ -26,9 +26,8 @@ pub fn main(init: std.process.Init) !void {
     var parsed = args.parseInto(allocator, Config, .{
         .name = "struct-demo",
         .description = "Declarative configuration via structs",
+        .config = .{ .exit_on_error = false },
     }, null, init) catch |err| {
-
-        // Currently the library prints error if exit_on_error is true (default).
         std.debug.print("Failed to parse: {}\n", .{err});
         return;
     };

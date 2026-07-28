@@ -31,11 +31,18 @@ const CliConfig = struct {
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
-    var result = try args.parseInto(allocator, CliConfig, .{
+    var result = args.parseInto(allocator, CliConfig, .{
         .name = "struct-demo",
         .version = "1.0.0",
         .description = "parseInto with enums, u32, f64, and more",
-    }, null, init);
+        .config = .{ .exit_on_error = false },
+    }, null, init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            std.debug.print("Missing required arguments.\n", .{});
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     const cfg = result.options;

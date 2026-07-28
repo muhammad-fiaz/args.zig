@@ -22,13 +22,21 @@ This guide will help you get started with args.zig in your Zig project.
 
 ### Release Installation (Recommended)
 
-Install the latest stable release (v0.0.8):
+Install the stable release matching your Zig version:
+
+**Zig 0.17+ (v0.0.8):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz
 ```
 
-Install the supported release for zig v0.15 (v0.0.4):
+**Zig 0.16 (v0.0.7):**
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
+```
+
+**Zig 0.15 (v0.0.4):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz

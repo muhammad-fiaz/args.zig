@@ -11,7 +11,10 @@ pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
     // 1. Initialize global argument parser
-    var ap = try args.createParser(allocator, "subcommand-range-demo");
+    var ap = try args.ArgumentParser.init(allocator, .{
+        .name = "subcommand-range-demo",
+        .config = .{ .exit_on_error = false },
+    });
     defer ap.deinit();
 
     ap.description = "Demonstrates character string length and integer range validation on global and subcommand inputs";
@@ -61,6 +64,10 @@ pub fn main(init: std.process.Init) !void {
 
     // 4. Parse the process arguments
     var result = ap.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try ap.printHelp();
+            return;
+        }
         std.debug.print("Input validation failed: {any}\n", .{err});
         return;
     };

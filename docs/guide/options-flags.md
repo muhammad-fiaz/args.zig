@@ -249,6 +249,8 @@ Typed input helpers are also available for common API/configuration flows:
 - `addIsoDateTimeOption`
 - `addYearOption`
 - `addTimeOption`
+- `addUnixTimestampOption`
+- `addDateFlexibleOption`
 - `addJsonOption`
 
 Use a one-call policy validator for the common case:
@@ -495,19 +497,82 @@ try parser.addMultiple("numbers", .{
 
 Retrieve multi-value results via `result.getArray("name")`.
 
-## Appended Values
+## Appended Values (Duplicate Argument Parsing)
 
-Collect same flag multiple times — each occurrence appends to an array:
+Collect the same flag multiple times — each occurrence appends to an array in **first-in, first-out (FIFO)** order. Values are stored in the exact order they appear on the command line, like a linked list where each new value is appended to the end.
 
 ```zig
-// --include path1 --include path2
+// --include path1 --include path2 --include path3
 try parser.addAppend("include", .{
     .short = 'I',
     .help = "Include path",
 });
 ```
 
-Retrieve appended values via `result.getArray("include")`.
+**FIFO storage behavior:**
+
+```bash
+myapp -I foo -I bar -I baz
+```
+
+Values are stored as `[foo, bar, baz]` — the order matches the command line exactly:
+
+```zig
+const arr = result.getArray("include").?;
+// arr[0] = "foo"
+// arr[1] = "bar"
+// arr[2] = "baz"
+```
+
+**How it works internally:**
+
+When the parser encounters `--include` (or `-I`) multiple times, it appends each value to the end of an internal array. This is equivalent to a linked-list append: each new value becomes the next element. The `getArray()` method returns the complete ordered slice.
+
+**Mixed short and long forms:**
+
+Short and long forms are treated as the same option — values from both are merged in order:
+
+```bash
+myapp -I first --include second -I third
+# Result: ["first", "second", "third"]
+```
+
+**Duplicate argument handling:**
+
+Unlike singleton options (which return `DuplicateArgument` when specified twice), appended options **allow duplicates by design**. Each occurrence adds a new entry:
+
+```zig
+try parser.addAppend("file", .{});
+// Command: --file a.txt --file b.txt --file a.txt
+// Result: ["a.txt", "b.txt", "a.txt"]  (duplicates preserved)
+```
+
+If you need deduplication, use `resolveIncludeExcludeStrict` with `.dedupe = true` after parsing.
+
+**Retrieve appended values via `result.getArray("name")`:**
+
+```zig
+var result = try parser.parseProcess(init);
+defer result.deinit();
+
+if (result.getArray("include")) |includes| {
+    for (includes) |path| {
+        std.debug.print("Include: {s}\n", .{path});
+    }
+}
+```
+
+**Combining with other features:**
+
+```zig
+try parser.addAppend("include", .{
+    .short = 'I',
+    .help = "Include path",
+    .env_var = "INCLUDE_PATHS",  // Also supports env var fallback
+});
+```
+
+See also: [Multiple Values](#multiple-values) for variadic `--source a b c` syntax, and [Bracket-Delimited Lists](#bracket-delimited-lists) for inline `{a,b,c}` arrays.
 
 ## Bracket-Delimited Lists
 

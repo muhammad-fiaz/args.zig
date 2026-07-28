@@ -1002,6 +1002,68 @@ pub const ArgumentParser = struct {
         });
     }
 
+    /// Adds a Unix timestamp option (positive integer, seconds since epoch).
+    pub fn addUnixTimestampOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = "TIMESTAMP",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        const validator_fn = options.validator orelse validation.Validators.unixTimestamp;
+        try self.addValidatedStringOption(name, validator_fn, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .expect = options.expect,
+        });
+    }
+
+    /// Adds a flexible date option (YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD).
+    pub fn addDateFlexibleOption(self: *ArgumentParser, name: []const u8, options: struct {
+        short: ?u8 = null,
+        help: ?[]const u8 = null,
+        default: ?[]const u8 = null,
+        required: bool = false,
+        metavar: ?[]const u8 = "DATE",
+        dest: ?[]const u8 = null,
+        env_var: ?[]const u8 = null,
+        hidden: bool = false,
+        aliases: []const []const u8 = &.{},
+        deprecated: ?[]const u8 = null,
+        validator: ?validation.ValidatorFn = null,
+        expect: []const []const u8 = &.{},
+    }) !void {
+        const validator_fn = options.validator orelse validation.Validators.dateFlexible;
+        try self.addValidatedStringOption(name, validator_fn, .{
+            .short = options.short,
+            .help = options.help,
+            .default = options.default,
+            .required = options.required,
+            .metavar = options.metavar,
+            .dest = options.dest,
+            .env_var = options.env_var,
+            .hidden = options.hidden,
+            .aliases = options.aliases,
+            .deprecated = options.deprecated,
+            .expect = options.expect,
+        });
+    }
+
     /// Adds a port option (`1..65535`).
     pub fn addPortOption(self: *ArgumentParser, name: []const u8, options: struct {
         short: ?u8 = null,
@@ -2626,16 +2688,36 @@ pub fn parseInto(
             const enum_info = @typeInfo(FT).@"enum";
             if (val_opt) |v| {
                 const str = v.asString() orelse return error.InvalidValue;
-                inline for (enum_info.field_names) |ef_name| {
+                const field_count_e = comptime if (@hasField(@TypeOf(enum_info), "field_names"))
+                    enum_info.field_names.len
+                else
+                    enum_info.fields.len;
+                comptime var ei: usize = 0;
+                inline while (ei < field_count_e) : (ei += 1) {
+                    const ef_name: [:0]const u8 = if (@hasField(@TypeOf(enum_info), "field_names"))
+                        enum_info.field_names[ei]
+                    else
+                        enum_info.fields[ei].name;
                     if (std.mem.eql(u8, ef_name, str)) {
                         @field(opts, field_name) = @field(InnerType, ef_name);
                         break;
                     }
                 } else return error.InvalidValue;
             } else {
-                const default_str = if (enum_info.field_names.len > 0) enum_info.field_names[0] else "";
-                inline for (enum_info.field_names) |ef_name| {
-                    if (std.mem.eql(u8, ef_name, default_str)) {
+                const first_name: [:0]const u8 = if (@hasField(@TypeOf(enum_info), "field_names"))
+                    if (enum_info.field_names.len > 0) enum_info.field_names[0] else ""
+                else if (enum_info.fields.len > 0) enum_info.fields[0].name else "";
+                const field_count_e = comptime if (@hasField(@TypeOf(enum_info), "field_names"))
+                    enum_info.field_names.len
+                else
+                    enum_info.fields.len;
+                comptime var ei: usize = 0;
+                inline while (ei < field_count_e) : (ei += 1) {
+                    const ef_name: [:0]const u8 = if (@hasField(@TypeOf(enum_info), "field_names"))
+                        enum_info.field_names[ei]
+                    else
+                        enum_info.fields[ei].name;
+                    if (std.mem.eql(u8, ef_name, first_name)) {
                         @field(opts, field_name) = @field(InnerType, ef_name);
                         break;
                     }
@@ -2646,7 +2728,16 @@ pub fn parseInto(
             const enum_info = @typeInfo(InnerEnum).@"enum";
             if (val_opt) |v| {
                 const str = v.asString() orelse return error.InvalidValue;
-                inline for (enum_info.field_names) |ef_name| {
+                const field_count_e = comptime if (@hasField(@TypeOf(enum_info), "field_names"))
+                    enum_info.field_names.len
+                else
+                    enum_info.fields.len;
+                comptime var ei: usize = 0;
+                inline while (ei < field_count_e) : (ei += 1) {
+                    const ef_name: [:0]const u8 = if (@hasField(@TypeOf(enum_info), "field_names"))
+                        enum_info.field_names[ei]
+                    else
+                        enum_info.fields[ei].name;
                     if (std.mem.eql(u8, ef_name, str)) {
                         @field(opts, field_name) = @field(InnerEnum, ef_name);
                         break;

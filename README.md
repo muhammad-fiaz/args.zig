@@ -100,13 +100,21 @@ A production-grade, high-performance command-line argument parsing library for Z
 
 ### Release Installation (Recommended)
 
-Install the latest stable release for zig v0.16 and v0.17+ (v0.0.8):
+Install the stable release matching your Zig version:
+
+**Zig 0.17+ (v0.0.8):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.8.tar.gz
 ```
 
-Install the supported release for zig v0.15 (v0.0.4):
+**Zig 0.16 (v0.0.7):**
+
+```bash
+zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.7.tar.gz
+```
+
+**Zig 0.15 (v0.0.4):**
 
 ```bash
 zig fetch --save https://github.com/muhammad-fiaz/args.zig/archive/refs/tags/0.0.4.tar.gz
@@ -553,22 +561,25 @@ try parser.addArg(.{
 
 ### Declarative Structs
 
-Define your CLI interface using a native Zig struct:
+Define your CLI interface using a native Zig struct. Fields with defaults are automatically optional:
 
 ```zig
 const Config = struct {
     verbose: bool,
     output: ?[]const u8,
     count: i32,
+    host: []const u8 = "localhost",
+    port: u32 = 8080,
 };
 
 // Parse directly into the struct
 var parsed = try args.parseInto(allocator, Config, .{
     .name = "myapp",
-}, null);
+}, null, init);
 defer parsed.deinit();
 
 std.debug.print("Count: {d}\n", .{parsed.options.count});
+std.debug.print("Host: {s}\n", .{parsed.options.host});
 ```
 
 ### Typed Numeric Options
@@ -632,7 +643,7 @@ const level = result.get("verbosity").?.asInt().? orelse 0; // -v -v => 2; -q =>
 
 ### Advanced parseInto with Enums
 
-Enum struct fields are automatically converted to `--flag` choices:
+Enum struct fields are automatically converted to `--flag` choices. Fields with defaults are optional:
 
 ```zig
 const LogLevel = enum { debug, info, warn, err };
@@ -652,6 +663,8 @@ defer parsed.deinit();
 
 std.debug.print("Log level: {s}\n", .{@tagName(parsed.options.log_level)});
 ```
+
+Run with no args to see defaults applied: `host=localhost`, `port=8080`, `log-level=info`, `timeout=30.0`.
 
 ### Environment Variable Configuration
 
@@ -814,6 +827,16 @@ Full documentation is available at [muhammad-fiaz.github.io/args.zig](https://mu
 - [API Reference](https://muhammad-fiaz.github.io/args.zig/api/parser)
 - [Examples](https://muhammad-fiaz.github.io/args.zig/examples/)
 - [Update Checker](https://muhammad-fiaz.github.io/args.zig/guide/updates)
+
+> [!TIP]
+> To generate docs for a specific older version, clone the repo, checkout the version tag, and run `zig build docs`:
+> ```bash
+> git clone https://github.com/muhammad-fiaz/args.zig.git
+> cd args.zig
+> git checkout 0.0.7   # or any release tag
+> zig build docs
+> ```
+> This generates a local docs site in `docs/.vitepress/dist/` that you can open in your browser.
 
 ## Contributing
 

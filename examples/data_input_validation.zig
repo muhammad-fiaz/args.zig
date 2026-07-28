@@ -26,6 +26,8 @@ pub fn main(init: std.process.Init) !void {
     try parser.addIsoDateTimeOption("timestamp", .{ .help = "Run timestamp (ISO)" });
     try parser.addYearOption("year", .{ .help = "Run year (YYYY)" });
     try parser.addTimeOption("time", .{ .help = "Run time (HH:MM[:SS])" });
+    try parser.addUnixTimestampOption("created", .{ .help = "Creation timestamp (Unix epoch seconds)" });
+    try parser.addDateFlexibleOption("deadline", .{ .short = 'D', .help = "Deadline date (YYYY-MM-DD or DD/MM/YYYY)" });
     try parser.addPortOption("port", .{ .help = "Service port (1..65535)" });
     try parser.addEndpointOption("service", .{ .help = "Service endpoint (host:port)" });
     try parser.addKeyValueOption("label", .{ .help = "Metadata label as key=value" });
@@ -66,6 +68,10 @@ pub fn main(init: std.process.Init) !void {
         "2026",
         "--time",
         "12:45:59",
+        "--created",
+        "1700000000",
+        "--deadline",
+        "30/03/2026",
         "--port",
         "8080",
         "--service",
@@ -96,6 +102,8 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("timestamp: {s}\n", .{parsed.getString("timestamp") orelse "<missing>"});
     std.debug.print("year: {s}\n", .{parsed.getString("year") orelse "<missing>"});
     std.debug.print("time: {s}\n", .{parsed.getString("time") orelse "<missing>"});
+    std.debug.print("created: {s}\n", .{parsed.getString("created") orelse "<missing>"});
+    std.debug.print("deadline: {s}\n", .{parsed.getString("deadline") orelse "<missing>"});
     std.debug.print("port: {s}\n", .{parsed.getString("port") orelse "<missing>"});
     std.debug.print("service: {s}\n", .{parsed.getString("service") orelse "<missing>"});
     if (parsed.getKeyValue("label")) |kv| {

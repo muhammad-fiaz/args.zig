@@ -10,6 +10,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = try args.ArgumentParser.init(allocator, .{
         .name = "env-option-example",
         .description = "Demonstrates automatic env var derivation",
+        .config = .{ .exit_on_error = false },
     });
     defer parser.deinit();
 
@@ -35,7 +36,13 @@ pub fn main(init: std.process.Init) !void {
         .default = "not-set",
     });
 
-    var result = try parser.parseProcess(init);
+    var result = parser.parseProcess(init) catch |err| {
+        if (err == args.ParseError.MissingRequired) {
+            try parser.printHelp();
+            return;
+        }
+        return err;
+    };
     defer result.deinit();
 
     std.debug.print("Environment-derived configuration:\n", .{});

@@ -339,6 +339,37 @@ pub fn validateTime24(value: []const u8) bool {
     return true;
 }
 
+/// Validates Unix timestamp (positive integer, reasonable range up to year 2100).
+pub fn validateUnixTimestamp(value: []const u8) bool {
+    if (value.len == 0) return false;
+    const ts = std.fmt.parseInt(u64, value, 10) catch return false;
+    return ts <= 4102444800; // 2100-01-01 00:00:00 UTC
+}
+
+/// Validates flexible date formats: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD.
+pub fn validateDateFlexible(value: []const u8) bool {
+    if (validateIsoDate(value)) return true; // YYYY-MM-DD
+
+    // DD/MM/YYYY or MM/DD/YYYY (slashes at positions 2 and 5, length 10)
+    if (value.len == 10 and value[2] == '/' and value[5] == '/') {
+        const a = std.fmt.parseInt(u16, value[0..2], 10) catch return false;
+        const b = std.fmt.parseInt(u16, value[3..5], 10) catch return false;
+        const c = std.fmt.parseInt(u16, value[6..10], 10) catch return false;
+        if (c >= 1000 and a >= 1 and a <= 31 and b >= 1 and b <= 12) return true;
+        if (c >= 1000 and a >= 1 and a <= 12 and b >= 1 and b <= 31) return true;
+    }
+
+    // YYYY/MM/DD (slashes at positions 4 and 7, length 10)
+    if (value.len == 10 and value[4] == '/' and value[7] == '/') {
+        const year = std.fmt.parseInt(u16, value[0..4], 10) catch return false;
+        const month = std.fmt.parseInt(u8, value[5..7], 10) catch return false;
+        const day = std.fmt.parseInt(u8, value[8..10], 10) catch return false;
+        if (year >= 1000 and month >= 1 and month <= 12 and day >= 1 and day <= 31) return true;
+    }
+
+    return false;
+}
+
 /// Validates hostnames using common DNS label constraints.
 pub fn validateHostName(value: []const u8) bool {
     if (value.len == 0 or value.len > 253) return false;
@@ -620,6 +651,18 @@ pub const Validators = struct {
     pub fn time(io: std.Io, value: []const u8) ValidationResult {
         _ = io;
         return if (validateTime24(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_time };
+    }
+
+    /// Validates Unix timestamp (positive integer).
+    pub fn unixTimestamp(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
+        return if (validateUnixTimestamp(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_unix_timestamp };
+    }
+
+    /// Validates flexible date formats (YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD).
+    pub fn dateFlexible(io: std.Io, value: []const u8) ValidationResult {
+        _ = io;
+        return if (validateDateFlexible(value)) .{ .ok = {} } else .{ .err = constants.ValidationMessages.invalid_date_flexible };
     }
 
     /// Validates hostname format.
@@ -1403,4 +1446,51 @@ test "Validators base64, macAddress, asciiOnly, lowercase, uppercase" {
 
     try std.testing.expect(Validators.uppercase(std.Io.failing, "HELLO").isOk());
     try std.testing.expect(!Validators.uppercase(std.Io.failing, "Hello").isOk());
+}
+
+test "validateUnixTimestamp" {
+    try std.testing.expect(validateUnixTimestamp("0"));
+    try std.testing.expect(validateUnixTimestamp("1700000000"));
+    try std.testing.expect(validateUnixTimestamp("4102444800")); // 2100-01-01
+    try std.testing.expect(!validateUnixTimestamp("4102444801")); // after 2100
+    try std.testing.expect(!validateUnixTimestamp("-1"));
+    try std.testing.expect(!validateUnixTimestamp("abc"));
+    try std.testing.expect(!validateUnixTimestamp(""));
+}
+
+test "validateDateFlexible" {
+    // ISO format
+    try std.testing.expect(validateDateFlexible("2026-03-30"));
+    try std.testing.expect(!validateDateFlexible("2026-13-01"));
+    try std.testing.expect(!validateDateFlexible("2026-02-30"));
+
+    // DD/MM/YYYY
+    try std.testing.expect(validateDateFlexible("30/03/2026"));
+    try std.testing.expect(validateDateFlexible("01/12/2026"));
+    try std.testing.expect(!validateDateFlexible("32/01/2026"));
+    try std.testing.expect(!validateDateFlexible("00/01/2026"));
+
+    // MM/DD/YYYY
+    try std.testing.expect(validateDateFlexible("12/31/2026"));
+    try std.testing.expect(validateDateFlexible("01/15/2026"));
+
+    // YYYY/MM/DD
+    try std.testing.expect(validateDateFlexible("2026/03/30"));
+    try std.testing.expect(validateDateFlexible("2026/12/01"));
+
+    // Invalid
+    try std.testing.expect(!validateDateFlexible("2026.03.30"));
+    try std.testing.expect(!validateDateFlexible("abc"));
+    try std.testing.expect(!validateDateFlexible(""));
+    try std.testing.expect(!validateDateFlexible("2026/13/01"));
+}
+
+test "Validators unixTimestamp and dateFlexible" {
+    try std.testing.expect(Validators.unixTimestamp(std.Io.failing, "1700000000").isOk());
+    try std.testing.expect(!Validators.unixTimestamp(std.Io.failing, "abc").isOk());
+
+    try std.testing.expect(Validators.dateFlexible(std.Io.failing, "2026-03-30").isOk());
+    try std.testing.expect(Validators.dateFlexible(std.Io.failing, "30/03/2026").isOk());
+    try std.testing.expect(Validators.dateFlexible(std.Io.failing, "2026/03/30").isOk());
+    try std.testing.expect(!Validators.dateFlexible(std.Io.failing, "2026.03.30").isOk());
 }
