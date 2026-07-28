@@ -98,8 +98,7 @@ pub fn deriveOptions(comptime T: type) []const ArgSpec {
                 break :blk field.default_value_ptr
             else
                 break :blk field.default_value;
-        } else
-            info.field_attrs[i].default_value_ptr;
+        } else info.field_attrs[i].default_value_ptr;
         const has_default = default_value_ptr != null;
 
         // For non-optional fields that have a struct-level default, convert
@@ -113,8 +112,7 @@ pub fn deriveOptions(comptime T: type) []const ArgSpec {
                 else
                     field.default_value.?;
                 break :blk2 @as(*const FieldType, @ptrCast(@alignCast(ptr))).*;
-            } else
-                info.field_attrs[i].defaultValue(FieldType) orelse unreachable;
+            } else info.field_attrs[i].defaultValue(FieldType) orelse unreachable;
 
             break :blk switch (FieldType) {
                 []const u8 => typed_val,
