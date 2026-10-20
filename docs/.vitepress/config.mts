@@ -3,6 +3,7 @@ import llmstxt from "vitepress-plugin-llms";
 
 // Site configuration
 export const SITE_URL = "https://muhammad-fiaz.github.io/args.zig";
+export const SITE_BASE = "/args.zig/";
 export const SITE_NAME = "args.zig";
 export const SITE_DESCRIPTION = "A fast, powerful, and developer-friendly command-line argument parsing library for Zig with argparse-inspired API, negated flags, shell completions, environment variables, subcommands, and strict include/exclude filter workflows.";
 
@@ -20,12 +21,18 @@ export default defineConfig({
   lang: "en-US",
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
-  base: "/args.zig/",
+  base: SITE_BASE,
   lastUpdated: true,
   cleanUrls: true,
 
   sitemap: {
-    hostname: SITE_URL,
+    hostname: `${SITE_URL}/`,
+    xmlns: {
+      news: false,
+      xhtml: false,
+      image: false,
+      video: false,
+    },
   },
 
   head: [
@@ -60,9 +67,6 @@ export default defineConfig({
     ["meta", { name: "twitter:description", content: SITE_DESCRIPTION }],
     ["meta", { name: "twitter:image", content: `${SITE_URL}/cover.png` }],
     ["meta", { name: "twitter:creator", content: "@muhammadfiaz_" }],
-
-    // Canonical URL
-    ["link", { rel: "canonical", href: SITE_URL }],
 
     // Favicons
     ["link", { rel: "icon", href: "/args.zig/favicon.ico" }],
