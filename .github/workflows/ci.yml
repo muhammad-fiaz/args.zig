@@ -1,123 +1,122 @@
 name: CI
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-  workflow_dispatch:
+    branches: [main, dev]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ZIG_VERSION: 0.16.0
+
 jobs:
-  build:
+  verify:
+    name: fmt, native tests, examples
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
         with:
-          fetch-depth: 0
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
-      - name: Run Zig tests
-        run: zig build test --summary all
-
-      - name: Build library (Debug)
-        run: zig build -Doptimize=Debug
-
-      - name: Build library (ReleaseFast)
-        run: zig build -Doptimize=ReleaseFast
-
-      - name: Build all examples
-        run: zig build -Dbuild-examples=true
-
-      - name: Run benchmarks
-        run: zig build bench
-
-      - name: Zig format check
+          version: ${{ env.ZIG_VERSION }}
+      - name: Check formatting
         run: zig fmt --check src/ examples/
+      - name: Test
+        run: zig build test --summary all
+      - name: Examples
+        run: zig build run-all-examples
 
-  examples-run:
-    name: Run Examples Matrix (hostable targets)
-    needs: build
-    runs-on: ${{ matrix.os }}
+  test-linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-linux
-          - os: macos-latest
-            target: x86_64-macos
-          - os: windows-2025-vs2026
-            target: x86_64-windows
+          - { name: x86_64-linux,     target: x86_64-linux-gnu,      optimize: Debug,       qemu: false }
+          - { name: aarch64-linux,    target: aarch64-linux-musl,    optimize: Debug,       qemu: true }
+          - { name: x86-linux,        target: x86-linux-musl,       optimize: Debug,       qemu: true }
+          - { name: x86-linux-safe,   target: x86-linux-musl,       optimize: ReleaseSafe, qemu: true }
+          - { name: arm-linux,        target: arm-linux-musleabihf, optimize: Debug,       qemu: true }
+          - { name: arm-linux-safe,   target: arm-linux-musleabihf, optimize: ReleaseSafe, qemu: true }
+          - { name: thumb-linux,      target: thumb-linux-musleabihf, optimize: Debug,     qemu: true }
+          - { name: riscv32-linux,    target: riscv32-linux-musl,   optimize: Debug,       qemu: true }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
         with:
-          fetch-depth: 0
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
-      - name: Run Zig tests on ${{ matrix.target }}
-        run: zig build test -Dtarget=${{ matrix.target }} --summary all
-
-      - name: Run all examples on ${{ matrix.target }}
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.target }}-${{ matrix.optimize }}
+      - name: Install QEMU
+        if: matrix.qemu
         run: |
-          echo "Running examples for ${{ matrix.target }}"
-          zig build -Dbuild-examples=true run-all-examples -Dtarget=${{ matrix.target }}
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-user
+          qemu-arm --version
+          qemu-aarch64 --version
+          qemu-riscv32 --version
+      - run: >-
+          zig build test
+          -Dtarget=${{ matrix.target }}
+          -Doptimize=${{ matrix.optimize }}
+          ${{ matrix.qemu && '-fqemu' || '' }} --summary all
 
-  examples-build-only:
-    name: Build Library Matrix (build-only for many targets)
-    needs: build
-    runs-on: ubuntu-latest
+  test-windows:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-linux
-          - x86-linux
-          - aarch64-linux
-          - x86_64-macos
-          - aarch64-macos
-          - x86_64-windows
-          - x86-windows
-          - x86_64-freestanding
-          - aarch64-freestanding
-          - riscv64-freestanding
-          - riscv64-linux
-          - riscv32-linux
-          - powerpc64le-linux
-          - mips64-linux
-          - s390x-linux
-          - arm-freestanding
-          - arm-linux-gnueabihf
+        include:
+          - { name: x86-windows,    target: x86-windows,    os: windows-latest }
+          - { name: x86_64-windows, target: x86_64-windows, os: windows-latest }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
         with:
-          fetch-depth: 0
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.target }}
+      - run: zig build test -Dtarget=${{ matrix.target }} --summary all
 
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
+  test-macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: aarch64-macos, target: aarch64-macos, os: macos-latest }
+          - { name: x86_64-macos, target: x86_64-macos, os: macos-15-intel }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.target }}
+      - run: zig build test -Dtarget=${{ matrix.target }} --summary all
 
-      - name: Build for ${{ matrix.target }} (build-only)
-        run: zig build -Dtarget=${{ matrix.target }} -Doptimize=Debug
-
-      - name: Build examples for supported non-native targets (compile-only)
-        if: contains('x86_64-linux x86-linux aarch64-linux x86_64-macos aarch64-macos x86_64-windows x86-windows', matrix.target)
-        run: |
-          echo "Compiling all examples for ${{ matrix.target }}"
-          zig build -Dbuild-examples=true -Dtarget=${{ matrix.target }}
+  build-only:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: x86-macos, target: x86-macos }
+          - { name: arm-linux-gnueabihf, target: arm-linux-gnueabihf }
+          - { name: x86-freestanding, target: x86-freestanding }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.target }}
+      - run: zig build -Dtarget=${{ matrix.target }}
